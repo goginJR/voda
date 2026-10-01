@@ -1,8 +1,8 @@
 {
-  "name": "Рейс — развоз воды",
-  "short_name": "Рейс",
+  "name": "Менеджер — вода",
+  "short_name": "Менеджер",
   "lang": "ru",
-  "id": "/voda/",
+  "id": "/voda/m/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

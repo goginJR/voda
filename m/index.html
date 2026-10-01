@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>Менеджер · вода</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{background:#0b1220;color:#e8eef9;font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;padding:0 0 92px}
+.wrap{max-width:720px;margin:0 auto;padding:12px}
+h1{font-size:19px;margin:4px 0 12px;font-weight:700}
+h2{font-size:14px;margin:18px 0 8px;letter-spacing:.9px;text-transform:uppercase;color:#8da2c0}
+.muted{color:#8da2c0}.small{font-size:13px}.tiny{font-size:12px}
+.g{color:#7ee787}.r{color:#ff9d9d}.b{color:#79c0ff}.y{color:#ffd479}
+
+.tabs{display:flex;gap:6px;position:sticky;top:0;background:#0b1220;padding:10px 0;z-index:5}
+.tabs button{flex:1;background:#18243d;color:#8da2c0;border:0;border-radius:12px;padding:12px 6px;font:inherit;font-weight:700;font-size:14px;cursor:pointer}
+.tabs button.on{background:#2563eb;color:#fff}
+.tabs button i{font-style:normal;display:block;font-size:11px;font-weight:400;opacity:.8}
+
+.card{background:#111c31;border:1px solid #1b2944;border-radius:14px;padding:12px;margin-bottom:10px}
+.card.sel{border-color:#2563eb;background:#13203a}
+.rowx{display:flex;align-items:center;gap:10px}
+.rowx .f{flex:1;min-width:0}
+.addr{font-weight:700}
+.amt{font-weight:800;white-space:nowrap}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #1b2944;font-size:14px}
+.kv:last-child{border:0}
+.kv span:last-child{text-align:right}
+
+button{font:inherit;border:0;border-radius:12px;padding:12px;font-weight:700;cursor:pointer}
+.b-main{background:#2563eb;color:#fff;width:100%;font-size:17px;padding:16px}
+.b-ok{background:#16a34a;color:#fff}
+.b-ghost{background:#18243d;color:#cfe0f7}
+.b-red{background:#3a1c22;color:#ff9d9d}
+.b-sm{padding:9px 12px;font-size:13px}
+.bar{position:fixed;left:0;right:0;bottom:0;background:#0b1220ee;backdrop-filter:blur(8px);padding:12px;border-top:1px solid #1b2944}
+.bar .wrap{padding:0}
+
+input,select,textarea{background:#0b1220;border:1px solid #2b3c5e;color:#e8eef9;border-radius:10px;padding:11px;font:inherit;width:100%}
+textarea{min-height:120px;font:14px/1.45 ui-monospace,monospace}
+.frow{display:flex;gap:8px;margin-bottom:8px}
+.frow>*{min-width:0}
+.frow .q{width:84px;text-align:center;font-weight:700}
+label.lb{display:block;font-size:12px;color:#8da2c0;margin:10px 0 4px}
+
+.chip{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;background:#18243d;color:#9fc3ff;margin-left:6px}
+.chip.debt{background:#3a1c22;color:#ff9d9d}
+.chip.tara{background:#3a3014;color:#ffd479}
+.chip.ok{background:#13351f;color:#7ee787}
+.load{background:#16233f;border:1px solid #2b3c5e;border-radius:14px;padding:12px;margin-bottom:10px}
+.load .lr{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0}
+.load .lr b{font-size:22px;font-weight:800}
+.vill{margin:14px 0 6px;font-size:12px;letter-spacing:.9px;text-transform:uppercase;color:#8da2c0;font-weight:700}
+.hr{height:1px;background:#1b2944;margin:14px 0}
+.quick{display:flex;gap:6px;flex-wrap:wrap}
+.quick button{background:#18243d;color:#cfe0f7;padding:9px 11px;font-size:13px;line-height:1.25}
+.quick button.on2{background:#2563eb;color:#fff}
+.warn{background:#3a3014;border:1px solid #6b5520;border-radius:12px;padding:10px;font-size:13px;color:#ffd479;margin-bottom:10px}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="tabs" id="tabs"></div><div id="app"></div></div>
+<div class="bar"><div class="wrap" id="bar"></div></div>
+<input type="file" id="imp" accept=".json,.txt,application/json,text/plain" style="display:none">
+
+<script>
+/* ============================================================
+   Менеджерский экран. Данные лежат в том же виде, что на сервере:
+   движения тары и денег, а не итоговые числа. Поэтому переход на
+   сервер = подмена четырёх функций ниже (load/save/… ) на fetch.
+   ============================================================ */
+const MODE = 'local';              // 'local' | 'server'
+const KEY  = 'voda-mgr-v1';
+
+const PRICE   = {'Идель':200, 'Дивеево':250};
+const BUY     = {'Идель':45,  'Дивеево':68};
+const DEPOSIT = 300;               // залог за бутыль
+const FLOOR_RATE = 20, DRIVER_FLOOR_RATE = 15, PAY_PER_BOTTLE = 80, SPARE = 3;
+const CARS = [['Поло',38], ['Кашкай',55], ['Соллерс',120]];   // вместимость, бутылей
+
+/* ---------- стартовые данные: клиенты и фактический рейс 01.10 ----------
+   Телефоны сюда не вписаны сознательно: файл лежит на публичном хостинге.
+   Менеджер вносит их сам, они останутся только в его телефоне. */
+const SEED_CLIENTS = [
+  {id:1,  vill:'ОпаЕльня',   addr:'Ближняя 27',       name:'',                    usual:5,  rhythm:7},
+  {id:2,  vill:'ОпаЕльня',   addr:'Радужная 15',      name:'',                    usual:3,  rhythm:10},
+  {id:3,  vill:'ОпаЕльня',   addr:'Радужная 21',      name:'',                    usual:3,  rhythm:10},
+  {id:4,  vill:'ОпаЕльня',   addr:'Садовая 1',        name:'Ибрагимова Т. А.',    usual:4,  rhythm:14},
+  {id:5,  vill:'ОпаЕльня',   addr:'Светлая 280',      name:'Анастасия',           usual:4,  rhythm:7},
+  {id:6,  vill:'ОпаЕльня',   addr:'Светлая 94',       name:'Татьяна Николаевна',  usual:2,  rhythm:14},
+  {id:7,  vill:'сп Культура',addr:'Молодёжная 1',     name:'Кабанова Н. В.',      usual:2,  rhythm:14,
+   apt:{ent:'',floor:4,flat:'30',code:'32705',acc:'лифта нет'}},
+  {id:8,  vill:'сп Культура',addr:'Изумрудная 20к2',  name:'',                    usual:2,  rhythm:14},
+  {id:9,  vill:'Крутая',     addr:'Ясная 19',         name:'Одинцова Ольга',      usual:2,  rhythm:14},
+  {id:10, vill:'Крутая',     addr:'Калиновая 27',     name:'',                    usual:2,  rhythm:14},
+  {id:11, vill:'Ждановский', addr:'Кленовая 5/2',     name:'Коломенцев А. В.',    usual:4,  rhythm:10},
+  {id:12, vill:'Кстово',     addr:'Ступишина 2А к 6', name:'ЧПУ «Комплекс»',      usual:10, rhythm:7,
+   map:'Нижегородская область, Кстово, улица Ступишина, 2А корпус 6'}
+];
+
+// Рейс 01.10.2026 как он прошёл в действительности.
+// given — отдано, taken — забрано пустой тары, paid — фактически получено.
+const SEED_ROUTE = [
+  {c:1,  items:[['Идель',5]],             given:5,  taken:5, paid:1000},
+  {c:2,  items:[['Идель',3]],             given:3,  taken:0, paid:600},
+  {c:3,  items:[['Идель',3]],             given:3,  taken:0, paid:600},
+  {c:4,  items:[['Идель',4]],             given:4,  taken:4, paid:800},
+  {c:5,  items:[['Идель',5]],             given:5,  taken:5, paid:1000, note:'попросила 5 вместо 4'},
+  {c:6,  items:[['Идель',2]],             given:2,  taken:2, paid:400},
+  // занос посчитали за 3 этажа вместо 4. Дима решил не догонять, а выставлять
+  // правильно со следующего раза — поэтому начислено ровно столько, сколько взято.
+  {c:7,  items:[['Идель',2]],             given:2,  taken:2, paid:520, charged:520,
+   note:'занос за 3 этажа вместо 4; со следующего раза 560'},
+  {c:8,  items:[['Идель',2]],             given:2,  taken:4, paid:400},
+  {c:9,  items:[['Идель',1],['Дивеево',1]],given:2, taken:2, paid:450},
+  {c:10, items:[['Идель',2]],             given:2,  taken:2, paid:400},
+  {c:11, items:[['Идель',4]],             given:4,  taken:2, paid:800},
+  {c:12, items:[['Идель',10]],            given:10, taken:8, paid:2000}
+];
+
+function fresh(){
+  const S = {clients:[], orders:[], tara:[], money:[], routes:[], nextId:100, tab:'orders',
+             sel:[], open:null, paste:'', parsed:null, find:'',
+             day:today(), newDay:today()};
+  S.clients = SEED_CLIENTS.map(c=>({...c, tel:'', note:'', active:true}));
+  const at = '2026-10-01';
+  SEED_ROUTE.forEach((r,i)=>{
+    const items = r.items.map(([w,q])=>({w,q,p:PRICE[w]}));
+    const charged = r.charged !== undefined ? r.charged
+      : items.reduce((s,x)=>s+x.q*x.p,0) + floorFeeOf(S.clients.find(c=>c.id===r.c), r.given);
+    S.orders.push({id:1000+i, client:r.c, items, pay:'transfer', status:'done',
+                   route:1, seq:i+1, extra:0, back:r.taken, done_at:at, note:r.note||''});
+    S.tara.push({client:r.c, at, given:r.given, taken:r.taken, reason:'доставка'});
+    S.money.push({client:r.c, at, charged, paid:0, kind:'charge', note:r.note||''});
+    S.money.push({client:r.c, at, charged:0, paid:r.paid, kind:'transfer', note:''});
+  });
+  S.routes.push({id:1, date:at, status:'done'});
+  return S;
+}
+function floorFeeOf(c, bottles){
+  const f = (c && c.apt && Number(c.apt.floor)) || 0;
+  return f * FLOOR_RATE * bottles;
+}
+
+let S = load();
+function load(){
+  try{ const r = localStorage.getItem(KEY); if(r){ const o = JSON.parse(r); if(o && o.clients) return o; } }catch(e){}
+  return fresh();
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+const nid = () => ++S.nextId;
+
+/* ---------- расчёты ---------- */
+const cli      = id => S.clients.find(c=>c.id===id) || {vill:'?', addr:'?', name:''};
+const floorOf  = c => (c.apt && Number(c.apt.floor)) || 0;
+const bottles  = o => o.items.reduce((s,i)=>s+i.q,0) + (o.extra||0);
+const waterSum = o => o.items.reduce((s,i)=>s+i.q*i.p,0) + (o.extra||0)*(o.items[0]?.p||0);
+const orderSum = o => waterSum(o) + floorOf(cli(o.client)) * FLOOR_RATE * bottles(o);
+const driverPay= o => bottles(o)*PAY_PER_BOTTLE + floorOf(cli(o.client))*DRIVER_FLOOR_RATE*bottles(o);
+const taraDebt = id => S.tara.filter(t=>t.client===id).reduce((s,t)=>s+t.given-t.taken, 0);
+const moneyDebt= id => S.money.filter(m=>m.client===id).reduce((s,m)=>s+m.charged-m.paid, 0);
+const lastOrder= id => { const l = S.orders.filter(o=>o.client===id && o.status==='done')
+                           .map(o=>o.done_at).sort(); return l.length ? l[l.length-1] : null; };
+const money = n => Math.round(n).toLocaleString('ru-RU')+' ₽';
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+function today(){ return new Date().toISOString().slice(0,10); }
+const ruDate = d => d ? d.split('-').reverse().join('.') : '—';
+const daysAgo = d => d ? Math.round((Date.now() - new Date(d+'T12:00:00')) / 86400000) : null;
+
+/* ---------- даты ---------- */
+const addDays = (d, n) => { const x = new Date(d+'T12:00:00'); x.setDate(x.getDate()+n);
+                            return x.toISOString().slice(0,10); };
+const DOW = ['вс','пн','вт','ср','чт','пт','сб'];
+const dowOf = d => DOW[new Date(d+'T12:00:00').getDay()];
+const dayShort = d => d.slice(8,10)+'.'+d.slice(5,7);
+const dayLabel = d => d === today() ? 'сегодня'
+                    : d === addDays(today(),1) ? 'завтра'
+                    : dowOf(d)+' '+dayShort(d);
+const DAYS = () => Array.from({length:8}, (_,i)=>addDays(today(), i));
+
+/* ---------- заявки и рейсы по дням ---------- */
+const pending    = () => S.orders.filter(o=>o.status==='new');
+const pendingFor = d => pending().filter(o => (o.want || today()) === d);
+const routeFor   = d => S.routes.find(r => r.date === d && r.status !== 'done') || null;
+const plannedIn  = rid => S.orders.filter(o => o.status==='planned' && o.route===rid);
+const plannedFor = d => { const r = routeFor(d); return r ? plannedIn(r.id) : []; };
+// сколько бутылей ждёт на этот день: и в собранном рейсе, и в висящих заявках
+const dayLoad = d => [...plannedFor(d), ...pendingFor(d)].reduce((s,o)=>s+bottles(o), 0);
+
+/* ---------- досбор: кто на этих же улицах давно не заказывал ---------- */
+// дата последнего заказа: своя история важнее того, что пришло из справочника
+const lastDate   = c => lastOrder(c.id) || c.last || '';
+const streetOf   = a => String(a||'').replace(/\s*\d.*$/, '').trim().toLowerCase().replace(/ё/g,'е');
+// просрочка = дней с последнего заказа минус его обычный ритм
+const overdueOf  = c => { const d = daysAgo(lastDate(c)), r = Number(c.rhythm)||0;
+                          return (d===null || !r) ? null : d - r; };
+function fillUp(pts){
+  const inRoute  = new Set(pts.map(o=>o.client));
+  const villages = new Set(pts.map(o=>cli(o.client).vill));
+  const streets  = new Set(pts.map(o=>streetOf(cli(o.client).addr)));
+  return S.clients
+    .filter(c => c.active && !inRoute.has(c.id) && villages.has(c.vill) && (Number(c.usual)||0) > 0)
+    .map(c => ({c, od: overdueOf(c), same: streets.has(streetOf(c.addr))}))
+    .filter(x => x.od === null || x.od >= 0)          // либо срок подошёл, либо ритм неизвестен
+    .sort((a,b) => (b.same - a.same) || ((b.od ?? -1) - (a.od ?? -1)))
+    .slice(0, 12);
+}
+
+/* ---------- отрисовка ---------- */
+const TABS = [
+  ['orders',  'Заявки',  () => pending().length + ' висит'],
+  ['route',   'Рейсы',   () => { const n = S.routes.filter(r=>r.status==='draft'||r.status==='frozen').length;
+                                 return n ? n+(n===1?' собран':' собрано') : 'не собраны'; }],
+  ['clients', 'Клиенты', () => S.clients.filter(c=>c.active).length + ' всего']
+];
+function render(){
+  document.getElementById('tabs').innerHTML = TABS.map(([k,t,sub])=>
+    `<button class="${S.tab===k?'on':''}" onclick="go('${k}')">${t}<i>${sub()}</i></button>`).join('');
+  const a = document.getElementById('app'), b = document.getElementById('bar');
+  b.innerHTML = '';
+  ({orders:viewOrders, route:viewRoute, clients:viewClients}[S.tab])(a, b);
+  save();
+}
+function go(t){ S.tab = t; S.open = null; render(); }
+
+/* ====================== ЗАЯВКИ ====================== */
+function viewOrders(a, b){
+  const p = pending();
+  a.innerHTML = `
+  <h2>Вставить заявки текстом</h2>
+  <textarea id="pa" placeholder="Светлая 280 - 4&#10;Радужная 15 3&#10;Ясная 19 1 + 1 дивеево&#10;Ступишина 10">${esc(S.paste)}</textarea>
+  <div class="frow" style="margin-top:8px">
+    <button class="b-ghost" style="flex:1" onclick="doParse()">Разобрать</button>
+    ${S.paste?`<button class="b-ghost b-sm" onclick="S.paste='';S.parsed=null;render()">Очистить</button>`:''}
+  </div>
+  ${S.parsed ? parsedBlock() : ''}
+
+  <h2>Добавить вручную</h2>
+  <div class="card">
+    <select id="mc">${S.clients.filter(c=>c.active).map(c=>
+      `<option value="${c.id}">${esc(c.vill)} · ${esc(c.addr)}${c.name?' · '+esc(c.name):''}</option>`).join('')}</select>
+    <div class="frow" style="margin-top:8px">
+      <select id="mw"><option>Идель</option><option>Дивеево</option></select>
+      <input class="q" id="mq" type="number" inputmode="numeric" min="1" value="2">
+      <button class="b-ok b-sm" onclick="addManual()">Добавить</button>
+    </div>
+    <label class="lb">На какой день</label>
+    <div class="quick">${DAYS().slice(0,5).map(d=>
+      `<button class="${S.newDay===d?'on2':''}" onclick="S.newDay='${d}';render()">${dayLabel(d)}</button>`).join('')}</div>
+  </div>
+
+  <h2>Висящие заявки${p.length?' · '+p.length:''}</h2>
+  ${p.length ? byDay(p) : `<div class="card muted small">Пусто. Новые заявки появятся здесь.</div>`}`;
+
+  const d = S.newDay || today();
+  const pd = pendingFor(d);
+  if(pd.length) b.innerHTML = `<button class="b-main" onclick="toRoute('${d}')">Собрать рейс на ${dayLabel(d)} · ${pd.length} точек, ${pd.reduce((s,o)=>s+bottles(o),0)} бут.</button>`;
+  else if(p.length) b.innerHTML = `<div class="muted small" style="text-align:center">На ${dayLabel(d)} заявок нет. Выбери другой день кнопками выше.</div>`;
+  const ta = document.getElementById('pa');
+  if(ta) ta.oninput = e => { S.paste = e.target.value; };
+}
+// заявки сгруппированы по дню, на который их ждут
+function byDay(list){
+  const g = {};
+  list.forEach(o => { const d = o.want || today(); (g[d] = g[d] || []).push(o); });
+  return Object.keys(g).sort().map(d => {
+    const q = g[d].reduce((s,o)=>s+bottles(o),0);
+    return `<div class="vill">${dayLabel(d)} · ${g[d].length} адр., ${q} бут.</div>` + g[d].map(cardOrder).join('');
+  }).join('');
+}
+const cardOrder = o => { const c = cli(o.client), td = taraDebt(o.client), md = moneyDebt(o.client);
+  const d = o.want || today();
+  return `<div class="card"><div class="rowx">
+    <div class="f"><div class="addr">${esc(c.addr)}
+      ${td>0?`<span class="chip tara">тара ${td}</span>`:''}${md>0?`<span class="chip debt">долг ${money(md)}</span>`:''}</div>
+      <div class="muted tiny">${esc(c.vill)}${c.name?' · '+esc(c.name):''} · ${o.items.map(i=>i.w+' '+i.q).join(' + ')}${o.note?' · '+esc(o.note):''}</div></div>
+    <div class="amt">${money(orderSum(o))}</div>
+    <button class="b-red b-sm" onclick="dropOrder(${o.id})">✕</button>
+  </div>
+  <div class="quick" style="margin-top:8px">${DAYS().slice(0,5).map(x=>
+    `<button class="${x===d?'on2':''}" onclick="setWant(${o.id},'${x}')">${dayLabel(x)}</button>`).join('')}</div>
+  </div>`; };
+function setWant(id, d){ const o = S.orders.find(x=>x.id===id); if(o){ o.want = d; render(); } }
+
+function addManual(){
+  const id = Number(document.getElementById('mc').value);
+  const w  = document.getElementById('mw').value;
+  const q  = Math.max(1, parseInt(document.getElementById('mq').value) || 1);
+  S.orders.push({id:nid(), client:id, items:[{w, q, p:PRICE[w]}], pay:'transfer',
+                 status:'new', want:S.newDay||today(), extra:0, back:null, note:''});
+  render();
+}
+function dropOrder(id){ S.orders = S.orders.filter(o=>o.id!==id); render(); }
+
+/* ---------- разбор вставленного текста ---------- */
+const norm = s => s.toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]/g,'');
+function findClient(txt){
+  const n = norm(txt);
+  if(!n) return null;
+  let best = null, bestLen = 0;
+  for(const c of S.clients){
+    if(!c.active) continue;
+    const ca = norm(c.addr);
+    if(n.startsWith(ca) || ca.startsWith(n) || n.includes(ca)){
+      if(ca.length > bestLen){ best = c; bestLen = ca.length; }
+    }
+  }
+  return best;
+}
+function doParse(){
+  const lines = String(S.paste || '').split('\n').map(s=>s.trim()).filter(Boolean);
+  S.parsed = lines.map(line => {
+    const div = /дивеев/i.test(line);
+    // количества — все числа, не входящие в номер дома: берём после разделителя или последнее
+    const nums = (line.match(/\d+/g) || []).map(Number);
+    const cut  = line.search(/[-–—:]|\s\d+\s*(бут|шт)/i);
+    const head = (cut > 0 ? line.slice(0, cut) : line.replace(/\s*\d+\s*$/, '')).trim();
+    const c = findClient(head);
+    let q = nums.length ? nums[nums.length-1] : 0;
+    let items;
+    if(div && nums.length >= 2){
+      items = [{w:'Идель', q:nums[nums.length-2], p:PRICE['Идель']},
+               {w:'Дивеево', q:nums[nums.length-1], p:PRICE['Дивеево']}];
+    } else {
+      items = [{w: div ? 'Дивеево' : 'Идель', q, p: div ? PRICE['Дивеево'] : PRICE['Идель']}];
+    }
+    return {line, head, client: c ? c.id : null, items, ok: !!c && items.every(i=>i.q>0)};
+  });
+  render();
+}
+function parsedBlock(){
+  const good = S.parsed.filter(p=>p.ok).length;
+  return `<div class="card">
+    <div class="small muted" style="margin-bottom:8px">Разобрано ${good} из ${S.parsed.length}. Проверь и добавляй.</div>
+    ${S.parsed.map((p,i)=>{
+      const c = p.client ? cli(p.client) : null;
+      return `<div class="kv"><span>${c?`<b>${esc(c.addr)}</b> <span class="muted tiny">${esc(c.vill)}</span>`
+        :`<span class="r">не нашёл адрес</span> <span class="muted tiny">${esc(p.head)}</span>`}</span>
+        <span>${p.items.filter(x=>x.q>0).map(x=>x.w+' '+x.q).join(' + ')||'<span class="r">нет количества</span>'}
+          ${p.ok?`<select onchange="setParsedClient(${i},this.value)" style="width:auto;padding:4px 6px;font-size:12px;margin-left:6px">
+            <option value="${p.client}">сменить…</option>
+            ${S.clients.filter(c=>c.active).map(c=>`<option value="${c.id}">${esc(c.addr)}</option>`).join('')}</select>`
+          :`<select onchange="setParsedClient(${i},this.value)" style="width:auto;padding:4px 6px;font-size:12px;margin-left:6px">
+            <option value="">выбрать клиента…</option>
+            ${S.clients.filter(c=>c.active).map(c=>`<option value="${c.id}">${esc(c.vill)} · ${esc(c.addr)}</option>`).join('')}</select>`}
+        </span></div>`;
+    }).join('')}
+    ${good?`<button class="b-ok" style="width:100%;margin-top:10px" onclick="commitParsed()">Добавить ${good} заявок</button>`:''}
+  </div>`;
+}
+function setParsedClient(i, v){ S.parsed[i].client = v ? Number(v) : null;
+  S.parsed[i].ok = !!v && S.parsed[i].items.every(x=>x.q>0); render(); }
+function commitParsed(){
+  S.parsed.filter(p=>p.ok).forEach(p=>S.orders.push({id:nid(), client:p.client,
+    items:p.items.filter(x=>x.q>0), pay:'transfer', status:'new',
+    want:S.newDay||today(), extra:0, back:null, note:''}));
+  S.parsed = null; S.paste = ''; render();
+}
+
+/* ====================== РЕЙС ====================== */
+function toRoute(date){
+  const d = date || S.day || today();
+  let r = routeFor(d);
+  if(!r){
+    const rid = (S.routes.reduce((m,x)=>Math.max(m,x.id),0) || 0) + 1;
+    r = {id:rid, date:d, status:'draft'};
+    S.routes.push(r);
+  }
+  const base = plannedIn(r.id).length;
+  pendingFor(d).forEach((o,i)=>{ o.status='planned'; o.route=r.id; o.seq=base+i+1; });
+  S.tab = 'route'; S.day = d; render();
+}
+function viewRoute(a, b){
+  const d = S.day || today();
+  const r = routeFor(d);
+  const pts = r ? plannedIn(r.id) : [];
+  const strip = `<div class="quick" style="margin-bottom:12px">${DAYS().map(x=>{
+      const n = dayLoad(x), rr = routeFor(x);
+      return `<button class="${x===d?'on2':''}" onclick="S.day='${x}';render()">${dayLabel(x)}${
+        n?`<br><span style="font-size:11px;opacity:.8">${n} бут.${rr?' ✓':''}</span>`:''}</button>`;
+    }).join('')}</div>`;
+
+  if(!pts.length){
+    const pd = pendingFor(d);
+    a.innerHTML = strip + (pd.length
+      ? `<div class="card"><div class="small">На ${dayLabel(d)} висит ${pd.length} заявок, ${pd.reduce((s,o)=>s+bottles(o),0)} бут. Рейс ещё не собран.</div>
+         <button class="b-ok" style="width:100%;margin-top:10px" onclick="toRoute('${d}')">Собрать рейс на ${dayLabel(d)}</button></div>`
+      : `<div class="card muted small">На ${dayLabel(d)} ничего нет. Заявки добавляются на вкладке «Заявки», там же выбирается день.</div>`)
+      + routeHistory();
+    return;
+  }
+  const byW = {}; pts.forEach(o=>o.items.forEach(i=>byW[i.w]=(byW[i.w]||0)+i.q));
+  const q = pts.reduce((s,o)=>s+bottles(o),0);
+  const sum = pts.reduce((s,o)=>s+orderSum(o),0);
+  const dp  = pts.reduce((s,o)=>s+driverPay(o),0);
+  const buy = Object.entries(byW).reduce((s,[w,n])=>s+n*(BUY[w]||0),0);
+  const byV = {}; pts.forEach(o=>{ const v = cli(o.client).vill; (byV[v]=byV[v]||[]).push(o); });
+
+  a.innerHTML = strip + `
+  <h1>Рейс на ${dayLabel(d)} · ${ruDate(d)}${r.status==='frozen'?' <span class="chip">водитель в рейсе</span>':''}</h1>
+  <div class="load"><h2 style="margin:0 0 8px">Грузить на заводе</h2>
+    ${Object.entries(byW).sort((x,y)=>y[1]-x[1]).map(([w,n])=>
+      `<div class="lr"><span>${esc(w)}</span><b>${n+SPARE}</b></div>
+       <div class="muted tiny" style="margin:-4px 0 6px">по заявкам ${n} + запас ${SPARE}</div>`).join('')}
+  </div>
+  <div class="card">
+    <div class="kv"><span class="muted">Точек / бутылей</span><span><b>${pts.length}</b> / <b>${q}</b></span></div>
+    <div class="kv"><span class="muted">Выручка</span><span class="b"><b>${money(sum)}</b></span></div>
+    <div class="kv"><span class="muted">Закупка воды</span><span>−${money(buy)}</span></div>
+    <div class="kv"><span class="muted">Водителю</span><span>−${money(dp)}</span></div>
+    <div class="kv"><span class="muted">Остаётся до машины</span><span class="${sum-buy-dp>0?'g':'r'}"><b>${money(sum-buy-dp)}</b></span></div>
+    <div class="muted tiny" style="margin-top:6px">Аренда и ГСМ сюда не входят — их вносит водитель в конце рейса.</div>
+  </div>
+  ${q < 20 ? `<div class="warn">Бутылей меньше 20. По твоему же правилу такой рейс машину не отбивает.</div>` : ''}
+  ${q > 55 ? `<div class="warn">Больше 55 бутылей — брать грузовой, а не два рейса.</div>` : ''}
+  ${Object.keys(byV).map(v=>`<div class="vill">${esc(v)}</div>`+byV[v].map(cardPt).join('')).join('')}
+  ${fillUpBlock(pts, q)}
+  <div class="hr"></div>
+  <button class="b-ghost" style="width:100%" onclick="unRoute('${d}')">Разобрать рейс обратно в заявки</button>
+  ${routeHistory()}`;
+  b.innerHTML = `<button class="b-main" onclick="handOff('${d}')">Передать водителю · ${dayLabel(d)}</button>`;
+}
+const cardPt = o => { const c = cli(o.client), f = floorOf(c);
+  return `<div class="card"><div class="rowx">
+    <div class="f"><div class="addr">${esc(c.addr)}</div>
+      <div class="muted tiny">${o.items.map(i=>i.w+' '+i.q).join(' + ')}${f?` · ${f} этаж, занос ${money(f*FLOOR_RATE*bottles(o))}`:''}</div></div>
+    <div class="amt">${money(orderSum(o))}</div></div></div>`; };
+/* ---------- «Можно добрать» ---------- */
+function fillUpBlock(pts, q){
+  const list = fillUp(pts);
+  const car  = CARS.find(([,n]) => q <= n) || CARS[CARS.length-1];
+  const free = car[1] - q;
+  if(!list.length) return `<div class="hr"></div><div class="muted small">Добирать некого: на этих улицах у всех срок ещё не подошёл.</div>`;
+  return `<div class="hr"></div>
+  <h2>Можно добрать</h2>
+  <div class="muted small" style="margin:-4px 0 10px">
+    В рейсе ${q} бут. Под ${esc(car[0])} (${car[1]}) остаётся ${free} мест.
+    Ниже те, кто живёт на тех же улицах и у кого срок уже прошёл.</div>
+  ${list.map(({c, od, same}) => {
+    const d = daysAgo(lastDate(c));
+    return `<div class="card"><div class="rowx">
+      <div class="f"><div class="addr">${esc(c.addr)}
+        ${same?`<span class="chip">та же улица</span>`:''}
+        ${od!==null && od>0?`<span class="chip debt">+${od} дн</span>`:''}</div>
+        <div class="muted tiny">${esc(c.vill)}${c.name?' · '+esc(c.name):''} · обычно ${c.usual} бут.${
+          d!==null?` · был ${d} дн. назад`:' · заказов не было'}${c.rhythm?`, раз в ${c.rhythm} дн.`:''}</div></div>
+      <button class="b-ghost b-sm" onclick="remind(${c.id})">Напомнить</button>
+      <button class="b-ok b-sm" onclick="addFromClient(${c.id})">+${c.usual}</button>
+    </div></div>`;
+  }).join('')}`;
+}
+function remind(id){
+  const c = cli(id), d = daysAgo(lastDate(c));
+  const txt = `${c.name ? c.name + ', здравствуйте' : 'Здравствуйте'}! Мы завтра едем по ${c.vill}`
+    + `${d!==null ? `, а у вас с прошлого раза уже ${d} дней прошло` : ''}. `
+    + `Вода, наверное, кончается — привезти ${c.usual || ''} ${c.usual ? 'бутылей' : ''}?`.replace(/\s+/g,' ');
+  if(c.tel){
+    const wa = 'https://wa.me/' + c.tel.replace(/\D/g,'') + '?text=' + encodeURIComponent(txt);
+    if(confirm(txt + '\n\nОК — открыть WhatsApp, Отмена — просто скопировать')){ window.open(wa, '_blank'); return; }
+  }
+  copy(txt, 'Напоминание скопировано');
+}
+function addFromClient(id){
+  const c = cli(id), q = Math.max(1, Number(c.usual) || 1);
+  const d = S.day || today();
+  const r = routeFor(d);
+  const o = {id:nid(), client:id, items:[{w:'Идель', q, p:PRICE['Идель']}], pay:c.pay==='cash'?'cash':'transfer',
+             status: r ? 'planned' : 'new', route: r ? r.id : null,
+             want: d, seq: (r ? plannedIn(r.id).length : 0) + 1,
+             extra:0, back:null, note:'добрали'};
+  S.orders.push(o); render();
+}
+
+function unRoute(date){
+  const d = date || S.day || today(), r = routeFor(d);
+  if(!r) return;
+  plannedIn(r.id).forEach(o=>{ o.status='new'; o.route=null; o.want = d; });
+  S.routes = S.routes.filter(x=>x.id !== r.id);
+  S.tab='orders'; S.newDay = d; render();
+}
+function handOff(date){
+  const d = date || S.day || today(), r = routeFor(d);
+  const pts = r ? plannedIn(r.id) : [];
+  if(!pts.length) return;
+  const byW = {}; pts.forEach(o=>o.items.forEach(i=>byW[i.w]=(byW[i.w]||0)+i.q));
+  const txt = `Рейс на ${ruDate(d)}\nГрузить: ${Object.entries(byW).map(([w,n])=>w+' '+(n+SPARE)).join(', ')}\n\n`
+    + pts.map((o,i)=>{ const c=cli(o.client), f=floorOf(c);
+        return `${i+1}. ${c.vill} · ${c.addr} — ${o.items.map(x=>x.w+' '+x.q).join(' + ')} — ${money(orderSum(o))}`
+          + (f?` (${f} этаж)`:'') + (c.apt&&c.apt.code?`, домофон ${c.apt.code}`:'')
+          + (c.apt&&c.apt.flat?`, кв. ${c.apt.flat}`:''); }).join('\n')
+    + `\n\nИтого: ${pts.length} адр., ${pts.reduce((s,o)=>s+bottles(o),0)} бут., ${money(pts.reduce((s,o)=>s+orderSum(o),0))}`;
+  copy(txt, 'Состав рейса скопирован. Пока сервера нет — отправь водителю сообщением.');
+}
+function routeHistory(){
+  const done = S.routes.filter(r=>r.status==='done').sort((a,b)=>b.date.localeCompare(a.date));
+  if(!done.length) return '';
+  return `<h2>Прошедшие рейсы</h2>` + done.map(r=>{
+    const os = S.orders.filter(o=>o.route===r.id && o.status==='done');
+    const q = os.reduce((s,o)=>s+bottles(o),0);
+    const sum = os.reduce((s,o)=>s+orderSum(o),0);
+    return `<div class="card"><div class="rowx"><div class="f">
+      <div class="addr">${ruDate(r.date)}</div>
+      <div class="muted tiny">${os.length} адр. · ${q} бут.</div></div>
+      <div class="amt">${money(sum)}</div></div></div>`;
+  }).join('');
+}
+
+/* ====================== КЛИЕНТЫ ====================== */
+function viewClients(a, b){
+  if(S.open) return viewClient(a, b, S.open);
+  const all = S.clients.filter(c=>c.active);
+  const f = norm(S.find || '');
+  const list = f ? all.filter(c => norm(c.addr+c.name+c.vill).includes(f)) : all;
+  const byV = {}; list.forEach(c=>(byV[c.vill]=byV[c.vill]||[]).push(c));
+  const tDebt = all.reduce((s,c)=>s+Math.max(0,taraDebt(c.id)), 0);   // тара у должников
+  const tOver = all.reduce((s,c)=>s+Math.max(0,-taraDebt(c.id)), 0);  // вернули лишнего
+  const mDebt = all.reduce((s,c)=>s+Math.max(0,moneyDebt(c.id)), 0);
+  a.innerHTML = `
+  <div class="card">
+    <div class="kv"><span class="muted">Клиентов</span><span><b>${all.length}</b></span></div>
+    <div class="kv"><span class="muted">Тары за должниками</span><span class="y"><b>${tDebt}</b> бут. · ${money(tDebt*DEPOSIT)} залога</span></div>
+    ${tOver?`<div class="kv"><span class="muted">Вернули лишнего</span><span class="g">${tOver} бут.</span></div>
+    <div class="kv"><span class="muted">Чистая недостача</span><span class="y"><b>${tDebt-tOver}</b> бут.</span></div>`:''}
+    <div class="kv"><span class="muted">Денег за клиентами</span><span class="${mDebt?'r':'g'}"><b>${money(mDebt)}</b></span></div>
+    <div class="frow" style="margin-top:10px">
+      <button class="b-ghost b-sm" style="flex:1" onclick="document.getElementById('imp').click()">Загрузить справочник</button>
+      <button class="b-ghost b-sm" style="flex:1" onclick="doExport()">Выгрузить копию</button>
+    </div>
+  </div>
+  <input id="fi" placeholder="поиск по адресу или имени" value="${esc(S.find||'')}">
+  ${f?`<div class="muted small" style="margin-top:6px">Нашёл ${list.length} из ${all.length}</div>`:''}
+  ${Object.keys(byV).map(v=>`<div class="vill">${esc(v)} · ${byV[v].length}</div>`+byV[v].map(cardCl).join('')).join('')}
+  <h2>Новый клиент</h2>
+  <div class="card">
+    <div class="frow">
+      <select id="nv">${['ОпаЕльня','сп Культура','Крутая','Ждановский','Кстово'].map(v=>`<option>${v}</option>`).join('')}</select>
+      <input id="na" placeholder="улица и дом">
+    </div>
+    <div class="frow"><input id="nn" placeholder="имя, необязательно">
+      <button class="b-ok b-sm" onclick="addClient()">Создать</button></div>
+  </div>`;
+  const fi = document.getElementById('fi');
+  if(fi){
+    fi.oninput = e => { S.find = e.target.value; render();
+      const n = document.getElementById('fi');
+      if(n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } };
+  }
+}
+
+/* ---------- справочник: загрузка и копия ---------- */
+function doExport(){
+  const doc = {v:1, exported:today(), clients:S.clients,
+               tara:S.tara, money:S.money, orders:S.orders, routes:S.routes};
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(doc)], {type:'application/json'}));
+  a.download = 'voda-' + today() + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+// Слияние по адресу: своя история тары и денег не теряется, обновляются только
+// данные клиента. Новые адреса добавляются.
+function mergeClients(incoming){
+  let upd = 0, add = 0;
+  const idx = new Map(S.clients.map(c => [norm(c.vill + c.addr), c]));
+  const byAddr = new Map(S.clients.map(c => [norm(c.addr), c]));
+  for(const n of incoming){
+    if(!n || !n.addr) continue;
+    const hit = idx.get(norm((n.vill||'') + n.addr)) || byAddr.get(norm(n.addr));
+    if(hit){
+      Object.assign(hit, {
+        name: n.name || hit.name, tel: n.tel || hit.tel, tel2: n.tel2 || hit.tel2 || '',
+        usual: Number(n.usual) || hit.usual || 0, rhythm: Number(n.rhythm) || hit.rhythm || 0,
+        last: n.last || hit.last || '', status: n.status || hit.status || '',
+        pay: n.pay || hit.pay || 'transfer', opt: !!n.opt,
+        note: n.note || hit.note || '', tare_notes: n.tare_notes || hit.tare_notes || '',
+        vill: hit.vill || n.vill
+      });
+      upd++;
+    } else {
+      S.clients.push({...n, id: nid(), active: n.active !== false});
+      add++;
+    }
+  }
+  return {upd, add};
+}
+function doImport(file){
+  const r = new FileReader();
+  r.onload = () => {
+    let doc;
+    try { doc = JSON.parse(r.result); }
+    catch(e){ return alert('Это не похоже на файл справочника: ' + e.message); }
+    const list = Array.isArray(doc) ? doc : doc.clients;
+    if(!Array.isArray(list)) return alert('В файле нет списка клиентов');
+    const {upd, add} = mergeClients(list);
+    // если в файле лежит и история (наша же копия) — восстанавливаем её целиком
+    if(doc.tara && doc.money && confirm('В файле есть история тары и денег. Заменить текущую?')){
+      S.tara = doc.tara; S.money = doc.money;
+      if(doc.orders) S.orders = doc.orders;
+      if(doc.routes) S.routes = doc.routes;
+    }
+    render();
+    alert(`Готово. Обновлено ${upd}, добавлено ${add}. Всего в справочнике ${S.clients.length}.`);
+  };
+  r.onerror = () => alert('Не смог прочитать файл');
+  r.readAsText(file, 'utf-8');
+}
+const cardCl = c => { const td = taraDebt(c.id), md = moneyDebt(c.id), d = daysAgo(lastOrder(c.id));
+  return `<div class="card" onclick="openCl(${c.id})"><div class="rowx">
+    <div class="f"><div class="addr">${esc(c.addr)}
+      ${td>0?`<span class="chip tara">тара ${td}</span>`:td<0?`<span class="chip ok">переплата тарой ${-td}</span>`:''}
+      ${md>0?`<span class="chip debt">${money(md)}</span>`:''}</div>
+      <div class="muted tiny">${c.name?esc(c.name)+' · ':''}обычно ${c.usual||'?'} бут.${d!==null?` · был ${d===0?'сегодня':d+' дн. назад'}`:' · заказов не было'}</div></div>
+    <div class="muted">›</div></div></div>`; };
+function openCl(id){ S.open = id; render(); }
+function addClient(){
+  const addr = document.getElementById('na').value.trim();
+  if(!addr) return alert('нужен адрес');
+  S.clients.push({id:nid(), vill:document.getElementById('nv').value, addr,
+    name:document.getElementById('nn').value.trim(), tel:'', usual:0, rhythm:0, note:'', active:true});
+  render();
+}
+
+function viewClient(a, b, id){
+  const c = cli(id), td = taraDebt(id), md = moneyDebt(id);
+  const os = S.orders.filter(o=>o.client===id && o.status==='done')
+                     .sort((x,y)=>String(y.done_at).localeCompare(String(x.done_at)));
+  a.innerHTML = `
+  <button class="b-ghost b-sm" onclick="S.open=null;render()">‹ ко всем клиентам</button>
+  <h1 style="margin-top:12px">${esc(c.addr)}<div class="muted small" style="font-weight:400">${esc(c.vill)}</div></h1>
+  <div class="card">
+    ${c.name?`<div class="kv"><span class="muted">Клиент</span><span>${esc(c.name)}</span></div>`:''}
+    <div class="kv"><span class="muted">Телефон</span><span>${c.tel?esc(c.tel):'<span class="muted">не внесён</span>'}
+      <button class="b-ghost b-sm" style="margin-left:6px" onclick="setTel(${id})">${c.tel?'изменить':'внести'}</button></span></div>
+    ${c.tel2?`<div class="kv"><span class="muted">Второй номер</span><span>${esc(c.tel2)}</span></div>`:''}
+  </div>
+  ${c.tel?`<div class="frow">
+    <a class="b-ok" style="flex:1;text-align:center;text-decoration:none;color:#fff;padding:14px;border-radius:12px;font-weight:700" href="tel:${esc(c.tel)}">Позвонить</a>
+    <a class="b-ghost" style="flex:1;text-align:center;text-decoration:none;color:#cfe0f7;padding:14px;border-radius:12px;font-weight:700" href="https://wa.me/${esc(c.tel.replace(/\D/g,''))}" target="_blank" rel="noopener">WhatsApp</a>
+    <a class="b-ghost" style="flex:1;text-align:center;text-decoration:none;color:#cfe0f7;padding:14px;border-radius:12px;font-weight:700" href="sms:${esc(c.tel)}">СМС</a>
+  </div>`:''}
+  <div class="card">
+    <div class="kv"><span class="muted">Обычно берёт</span><span>${c.usual||'?'} бут., раз в ${c.rhythm||'?'} дн.</span></div>
+    ${c.apt?`<div class="kv"><span class="muted">Квартира</span><span>кв. ${esc(c.apt.flat||'')}, ${c.apt.floor} этаж${c.apt.code?', домофон '+esc(c.apt.code):''}${c.apt.acc?', '+esc(c.apt.acc):''}</span></div>`:''}
+    <div class="kv"><span class="muted">Последний заказ</span><span>${ruDate(lastOrder(id))}</span></div>
+  </div>
+  <div class="card">
+    <div class="kv"><span class="muted">Тара за клиентом</span><span class="${td>0?'y':'g'}"><b>${td}</b> бут.${td>0?` · ${money(td*DEPOSIT)} залога`:''}</span></div>
+    <div class="kv"><span class="muted">Денежный долг</span><span class="${md>0?'r':'g'}"><b>${money(md)}</b></span></div>
+    <div class="frow" style="margin-top:10px">
+      ${md>0?`<button class="b-ok b-sm" style="flex:1" onclick="takePay(${id},${md})">Принять оплату</button>`:''}
+      <button class="b-ghost b-sm" style="flex:1" onclick="fixTara(${id})">Правка тары</button>
+    </div>
+    ${td>0?`<button class="b-ghost" style="width:100%;margin-top:8px" onclick="akt(${id})">Акт сверки по таре</button>`:''}
+  </div>
+  <h2>Заказы</h2>
+  ${os.length ? os.map(o=>`<div class="card"><div class="rowx"><div class="f">
+      <div class="addr small">${ruDate(o.done_at)}</div>
+      <div class="muted tiny">${o.items.map(i=>i.w+' '+i.q).join(' + ')}${o.extra?` +${o.extra}`:''} · забрал тары ${o.back===null?'—':o.back}${o.note?' · '+esc(o.note):''}</div></div>
+      <div class="amt">${money(orderSum(o))}</div></div></div>`).join('')
+    : `<div class="card muted small">Заказов ещё не было.</div>`}
+  <h2>Движение тары</h2>
+  <div class="card">${S.tara.filter(t=>t.client===id).map(t=>
+    `<div class="kv"><span>${ruDate(t.at)} <span class="muted tiny">${esc(t.reason)}</span></span>
+     <span>отдал ${t.given}, забрал ${t.taken}</span></div>`).join('') || '<span class="muted small">пусто</span>'}</div>
+  <h2>Движение денег</h2>
+  <div class="card">${S.money.filter(m=>m.client===id).map(m=>
+    `<div class="kv"><span>${ruDate(m.at)} <span class="muted tiny">${esc(m.kind)}</span></span>
+     <span>${m.charged?'начислено '+money(m.charged):''}${m.paid?'<span class="g">получено '+money(m.paid)+'</span>':''}</span></div>`).join('') || '<span class="muted small">пусто</span>'}</div>`;
+}
+function setTel(id){
+  const c = cli(id);
+  const v = prompt('Телефон клиента (водителю он не показывается)', c.tel || '');
+  if(v === null) return;
+  c.tel = v.trim(); render();
+}
+function takePay(id, amt){
+  const v = prompt('Сколько получено, ₽', String(amt));
+  if(v === null) return;
+  const n = Math.round(Number(v)); if(!n) return;
+  const kind = confirm('Наличными? ОК — наличные, Отмена — перевод') ? 'cash' : 'transfer';
+  S.money.push({client:id, at:today(), charged:0, paid:n, kind, note:''}); render();
+}
+function fixTara(id){
+  const g = prompt('Отдал бутылей (вне доставки)', '0'); if(g === null) return;
+  const t = prompt('Забрал пустых', '0'); if(t === null) return;
+  const r = prompt('Причина: возврат / бой / сверка', 'возврат') || 'правка';
+  S.tara.push({client:id, at:today(), given:Math.max(0,parseInt(g)||0),
+               taken:Math.max(0,parseInt(t)||0), reason:r}); render();
+}
+function akt(id){
+  const c = cli(id), td = taraDebt(id);
+  const rows = S.tara.filter(t=>t.client===id);
+  const txt = `Акт сверки по оборотной таре\n${c.vill}, ${c.addr}${c.name?', '+c.name:''}\nна ${ruDate(today())}\n\n`
+    + rows.map(t=>`${ruDate(t.at)} — выдано ${t.given}, возвращено ${t.taken} (${t.reason})`).join('\n')
+    + `\n\nИтого выдано: ${rows.reduce((s,t)=>s+t.given,0)}\nИтого возвращено: ${rows.reduce((s,t)=>s+t.taken,0)}\n`
+    + `Не возвращено: ${td} бут.\nЗалоговая стоимость: ${money(td*DEPOSIT)} (${DEPOSIT} ₽ за бутыль)\n\n`
+    + `Просим вернуть тару либо оплатить залоговую стоимость.`;
+  copy(txt, 'Акт сверки скопирован');
+}
+
+/* ---------- копирование ---------- */
+function copy(txt, msg){
+  const t = document.createElement('textarea');
+  t.value = txt; t.style.position='fixed'; t.style.opacity='0';
+  document.body.appendChild(t); t.select(); t.setSelectionRange(0, 99999);
+  try{ document.execCommand('copy'); alert(msg); }
+  catch(e){ alert('Не вышло скопировать, вот текст:\n\n'+txt); }
+  document.body.removeChild(t);
+}
+
+document.getElementById('imp').onchange = e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(f) doImport(f);
+};
+render();
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
+</script>
+</body>
+</html>
