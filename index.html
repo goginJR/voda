@@ -44,31 +44,49 @@ h1{font-size:19px;margin:4px 0 12px;font-weight:700}
 .t-card{background:#122a44;color:#79c0ff}
 .bd{padding:0 14px 14px;display:none}
 .pt.open .bd{display:block}
-.kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1b2944}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid #1b2944}
 .kv:last-of-type{border:0}
-a.tel{color:#79c0ff;text-decoration:none;font-weight:700}
+.kv span:last-child{text-align:right}
 
 button{font:inherit;border:0;border-radius:12px;padding:13px;font-weight:700;cursor:pointer}
 .b-main{background:#2563eb;color:#fff;width:100%;font-size:17px;padding:17px}
 .b-ok{background:#16a34a;color:#fff;width:100%;margin-top:10px}
 .b-undo{background:#243352;color:#cfe0f7;width:100%;margin-top:10px}
 .b-ghost{background:#18243d;color:#cfe0f7}
-.b-red{background:#7f1d1d;color:#fecaca}
+
+.acts{display:flex;gap:8px;margin-top:12px}
+.acts a,.acts button{flex:1;display:block;text-align:center;text-decoration:none;
+  background:#18243d;color:#cfe0f7;border-radius:12px;padding:13px;font-weight:700;font-size:14px}
+.acts a.nav{background:#1e3a5f;color:#9fc3ff}
+
+.apt{background:#16233f;border:1px solid #2b3c5e;border-radius:12px;padding:10px 12px;margin-top:12px}
+.apt .ar{display:flex;justify-content:space-between;padding:4px 0;font-size:14px}
+.apt .ar b{font-size:16px}
+.apt .big2{font-size:22px;font-weight:800;color:#ffd479}
 
 .tara{display:flex;align-items:center;gap:10px;margin-top:12px;background:#18243d;padding:10px;border-radius:12px}
 .tara span{flex:1}
 .tara input{width:72px;background:#0b1220;border:1px solid #2b3c5e;color:#e8eef9;border-radius:10px;padding:10px;font-size:19px;text-align:center;font-weight:700}
 
+.plus{display:flex;align-items:center;gap:8px;margin-top:10px;background:#18243d;padding:10px;border-radius:12px}
+.plus span{flex:1;font-size:13px}
+.plus button{background:#243352;color:#cfe0f7;padding:10px 14px;min-width:46px}
+.plus button.add{background:#16a34a;color:#fff}
+
+.odd{display:flex;align-items:center;gap:10px;margin-top:10px;background:#18243d;padding:10px;border-radius:12px;cursor:pointer}
+.odd input[type=checkbox]{width:22px;height:22px;accent-color:#2563eb}
+.odd span{flex:1;font-size:13px}
+.oddc{width:100%;margin-top:8px;background:#0b1220;border:1px solid #2b3c5e;color:#e8eef9;border-radius:10px;padding:10px;font:inherit;font-size:14px}
+
 .bar{position:fixed;left:0;right:0;bottom:0;background:#0b1220ee;backdrop-filter:blur(8px);padding:12px;border-top:1px solid #1b2944}
 .bar .wrap{padding:0}
 
-.fin .line{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #1b2944;font-size:17px}
-.fin .line b{font-weight:800}
+.fin .line{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid #1b2944;font-size:17px}
+.fin .line b{font-weight:800;white-space:nowrap}
 .fin .hero{background:#111c31;border-radius:16px;padding:16px;margin:14px 0;text-align:center}
 .fin .hero .big{font-size:32px;font-weight:800;margin-top:4px}
-.g{color:#7ee787}.r{color:#ff9d9d}.b{color:#79c0ff}
-textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px solid #2b3c5e;border-radius:12px;padding:10px;font:13px/1.4 ui-monospace,monospace}
-.hide{display:none}
+.g{color:#7ee787}.r{color:#ff9d9d}.b{color:#79c0ff}.y{color:#ffd479}
+textarea{width:100%;height:170px;background:#0b1220;color:#cfe0f7;border:1px solid #2b3c5e;border-radius:12px;padding:10px;font:13px/1.4 ui-monospace,monospace}
 .paysw{display:flex;gap:8px;margin-top:10px}
 .paysw button{flex:1;background:#18243d;color:#8da2c0;padding:11px}
 .paysw button.on{background:#2563eb;color:#fff}
@@ -87,6 +105,7 @@ textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px sol
 .load .lr:last-child{border:0}
 .load .lr span{font-size:17px;font-weight:700}
 .load .lr b{font-size:26px;font-weight:800}
+.load .lr i{font-style:normal;font-size:13px;color:#8da2c0;font-weight:400}
 .loadmini{font-size:13px;color:#9fc3ff;margin-top:6px}
 </style>
 </head>
@@ -95,63 +114,134 @@ textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px sol
 <div class="bar"><div class="wrap" id="bar"></div></div>
 
 <script>
-const PAY_PER_BOTTLE = 80;          // фикса водителю, ₽ за бутыль
-const KEY = 'reis-2026-10-01-v7';
+/* ---------- настройки ---------- */
+const PAY_PER_BOTTLE   = 80;   // фикса водителю, ₽ за бутыль
+const FLOOR_RATE       = 20;   // с клиента: ₽ за этаж за бутыль
+const DRIVER_FLOOR_RATE= 20;   // водителю:  ₽ за этаж за бутыль  (Дима: 15 или 20 — поставлено 20)
+const SPARE            = 3;    // запас бутылей при погрузке       (размер не подтверждён)
+const MANAGER_TEL      = '+79870833737';  // «Связаться с менеджером» — проверить номер
 
-// Заявки на 01.10.2026 — разобраны из группы «ЗАЯВКИ»
+/* ---------- хранилище ----------
+   Ключ привязан к ДАТЕ РЕЙСА, а не к версии приложения.
+   Обновления кода докатываются, отметки водителя остаются на месте. */
+const ROUTE_DATE = '2026-10-01';
+const KEY = 'reis-' + ROUTE_DATE;
+const SCHEMA = 2;
+
+/* ---------- карта: деревня -> адрес для навигатора ---------- */
+const VILL_MAP = {
+  'ОпаЕльня':    '',   // Опалиха / Малая Ельня — какая улица в какой, не уточнено
+  'сп Культура': 'Нижегородская область, посёлок Культура',
+  'Крутая':      'Нижегородская область, деревня Крутая',
+  'Ждановский':  'Нижегородская область, рабочий посёлок Ждановский',
+  'Кстово':      'Нижегородская область, Кстово'
+};
+
+/* ---------- заявки на 01.10.2026 ----------
+   Телефонов клиентов здесь нет сознательно: водитель звонит менеджеру. */
 const SEED = [
-  {id:1,  vill:'ОпаЕльня',   addr:'Ближняя 27',          name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:5,p:200}],  tara:'', note:'с 30.09'},
-  {id:2,  vill:'ОпаЕльня',   addr:'Радужная 15',         name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:3,p:200}],  tara:'', note:''},
-  {id:3,  vill:'ОпаЕльня',   addr:'Радужная 21',         name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:3,p:200}],  tara:'', note:'заявка 12:37'},
-  {id:4,  vill:'ОпаЕльня',   addr:'Садовая 1',           name:'Ибрагимова Татьяна Александровна', tel:'89202920020', pay:'card', items:[{w:'Идель',q:4,p:200}], tara:'есть', note:''},
-  {id:5,  vill:'ОпаЕльня',   addr:'Светлая 280',         name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:4,p:200}],  tara:'', note:'висит с 28.09'},
-  {id:6,  vill:'ОпаЕльня',   addr:'Светлая 94',          name:'Татьяна Николаевна',     tel:'',             pay:'card', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
-  {id:7,  vill:'сп Культура',addr:'Молодёжная 1, кв. 30',name:'Кабанова Нина Васильевна', tel:'89524496923', pay:'card', items:[{w:'Идель',q:2,p:200}], tara:'есть', note:'4 этаж, домофон 32705'},
-  {id:8,  vill:'сп Культура',addr:'Изумрудная 20к2',     name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
-  {id:9,  vill:'Крутая',     addr:'Ясная 19',            name:'Одинцова Ольга',         tel:'+79202941877', pay:'card', items:[{w:'Идель',q:1,p:200},{w:'Дивеево',q:1,p:250}], tara:'есть', note:''},
-  {id:10, vill:'Крутая',     addr:'Калиновая 27',        name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:2,p:200}],  tara:'', note:''},
-  {id:11, vill:'Ждановский', addr:'Кленовая 5/2',        name:'Коломенцев Антон Владимирович', tel:'+79503616463', pay:'card', items:[{w:'Идель',q:4,p:200}], tara:'есть', note:''},
-  {id:12, vill:'Кстово',     addr:'Ступишина 2А к 6',    name:'ЧПУ «Комплекс»',         tel:'',             pay:'card', items:[{w:'Идель',q:10,p:200}], tara:'', note:'новый адрес, висит с 29.09'}
+  {id:1,  vill:'ОпаЕльня',   addr:'Ближняя 27',          name:'',                 pay:'card', items:[{w:'Идель',q:5,p:200}],  note:'с 30.09'},
+  {id:2,  vill:'ОпаЕльня',   addr:'Радужная 15',         name:'',                 pay:'card', items:[{w:'Идель',q:3,p:200}],  note:''},
+  {id:3,  vill:'ОпаЕльня',   addr:'Радужная 21',         name:'',                 pay:'card', items:[{w:'Идель',q:3,p:200}],  note:'заявка 12:37'},
+  {id:4,  vill:'ОпаЕльня',   addr:'Садовая 1',           name:'Ибрагимова Т. А.', pay:'card', items:[{w:'Идель',q:4,p:200}],  note:'тара есть'},
+  {id:5,  vill:'ОпаЕльня',   addr:'Светлая 280',         name:'Анастасия',        pay:'card', items:[{w:'Идель',q:4,p:200}],  note:'висит с 28.09'},
+  {id:6,  vill:'ОпаЕльня',   addr:'Светлая 94',          name:'Татьяна Николаевна', pay:'card', items:[{w:'Идель',q:2,p:200}], note:'с 30.09'},
+  {id:7,  vill:'сп Культура',addr:'Молодёжная 1',        name:'Кабанова Н. В.',   pay:'card', items:[{w:'Идель',q:2,p:200}],
+                             apt:{ent:'',floor:4,flat:'30',code:'32705',acc:'лифта нет'}, note:'тара есть'},
+  {id:8,  vill:'сп Культура',addr:'Изумрудная 20к2',     name:'',                 pay:'card', items:[{w:'Идель',q:2,p:200}],  note:'с 30.09'},
+  {id:9,  vill:'Крутая',     addr:'Ясная 19',            name:'Одинцова Ольга',   pay:'card', items:[{w:'Идель',q:1,p:200},{w:'Дивеево',q:1,p:250}], note:'тара есть'},
+  {id:10, vill:'Крутая',     addr:'Калиновая 27',        name:'',                 pay:'card', items:[{w:'Идель',q:2,p:200}],  note:''},
+  {id:11, vill:'Ждановский', addr:'Кленовая 5/2',        name:'Коломенцев А. В.', pay:'card', items:[{w:'Идель',q:4,p:200}],  note:'тара есть'},
+  {id:12, vill:'Кстово',     addr:'Ступишина 2А к 6',    name:'ЧПУ «Комплекс»',   pay:'card', items:[{w:'Идель',q:10,p:200}],
+                             map:'Нижегородская область, Кстово, улица Ступишина, 2А корпус 6', note:'новый адрес, висит с 29.09'}
 ];
 
-// Порядок объезда улиц внутри района (Дима, 01.10). Чего нет в списке — в конец.
+/* Порядок объезда улиц внутри района (Дима, 01.10). Чего нет в списке — в конец. */
 const STREETS = ['Ближняя','Радужная','Весенняя','Дальняя','Садовая','Светлая'];
 const streetRank = a => { const i = STREETS.findIndex(x => a.startsWith(x)); return i < 0 ? 99 : i; };
 
+/* ---------- состояние ---------- */
+const mk = p => ({...p, done:false, back:null, extra:0, ts:null, odd:false, oddNote:''});
+
 let S = load();
 function load(){
-  try{ const r = localStorage.getItem(KEY); if(r) return JSON.parse(r); }catch(e){}
-  return {stage:'prep', open:null, costs:[], pts: SEED.map(p=>({...p, done:false, back:null})), started:null, ended:null};
+  let old = null;
+  try{ const r = localStorage.getItem(KEY); if(r) old = JSON.parse(r); }catch(e){}
+  const st = {v:SCHEMA, stage:'prep', open:null, costs:[], pts:SEED.map(mk), started:null, ended:null};
+  if(!old || !Array.isArray(old.pts)) return st;
+  // переносим отметки водителя на актуальные данные заявок, а не затираем их
+  st.stage   = old.stage   || 'prep';
+  st.costs   = Array.isArray(old.costs) ? old.costs : [];
+  st.started = old.started || null;
+  st.ended   = old.ended   || null;
+  st.pts = st.pts.map(p => {
+    const o = old.pts.find(x => x.id === p.id);
+    if(!o) return p;
+    return {...p,
+      done:    !!o.done,
+      back:    (o.back === undefined ? null : o.back),
+      pay:     o.pay || p.pay,
+      extra:   Number(o.extra) || 0,
+      ts:      o.ts || null,
+      odd:     !!o.odd,
+      oddNote: o.oddNote || ''
+    };
+  });
+  return st;
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
-const qty = p => p.items.reduce((s,i)=>s+i.q,0);
-const sum = p => p.items.reduce((s,i)=>s+i.q*i.p,0);
+/* ---------- расчёты ---------- */
+const basePrice = p => p.items[0].p;
+const ordered   = p => p.items.reduce((s,i)=>s+i.q,0);          // по заявке
+const qty       = p => ordered(p) + (p.extra||0);               // фактически отдано
+const floorOf   = p => (p.apt && Number(p.apt.floor)) || 0;
+const floorFee  = p => floorOf(p) * FLOOR_RATE * qty(p);        // занос, с клиента
+const waterSum  = p => p.items.reduce((s,i)=>s+i.q*i.p,0) + (p.extra||0)*basePrice(p);
+const sum       = p => waterSum(p) + floorFee(p);
+const floorPay  = p => floorOf(p) * DRIVER_FLOOR_RATE * qty(p); // занос, водителю
+
 const money = n => n.toLocaleString('ru-RU')+' ₽';
-const water = p => p.items.map(i=>i.w+' '+i.q).join(' + ');
-function byWater(list){
+const water = p => p.items.map(i=>i.w+' '+i.q).join(' + ') + ((p.extra||0) ? ` +${p.extra}` : '');
+const tm    = ts => new Date(ts).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'});
+const dur   = ms => { const m = Math.round(ms/60000);
+  return m >= 60 ? Math.floor(m/60)+' ч '+String(m%60).padStart(2,'0')+' мин' : m+' мин'; };
+const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+
+function byWater(){
   const m = {};
-  (list||S.pts).forEach(p => p.items.forEach(i => { m[i.w] = (m[i.w]||0) + i.q; }));
+  S.pts.forEach(p => p.items.forEach(i => { m[i.w] = (m[i.w]||0) + i.q; }));
   return Object.entries(m).sort((a,b)=>b[1]-a[1]);
 }
-
+function mapAddr(p){
+  if(p.map) return p.map;
+  const v = VILL_MAP[p.vill];
+  return v ? v + ', ' + p.addr : '';
+}
+function navLink(p){
+  const a = mapAddr(p);
+  return a ? 'https://yandex.ru/maps/?rtext=~'+encodeURIComponent(a)+'&rtt=auto' : '';
+}
 function totals(only){
   const list = only ? S.pts.filter(only) : S.pts;
   return {
-    n: list.length,
-    q: list.reduce((s,p)=>s+qty(p),0),
-    all: list.reduce((s,p)=>s+sum(p),0),
+    n:    list.length,
+    q:    list.reduce((s,p)=>s+qty(p),0),
+    all:  list.reduce((s,p)=>s+sum(p),0),
     cash: list.filter(p=>p.pay==='cash').reduce((s,p)=>s+sum(p),0),
     card: list.filter(p=>p.pay==='card').reduce((s,p)=>s+sum(p),0),
-    back: list.reduce((s,p)=>s+(Number(p.back)||0),0)
+    back: list.reduce((s,p)=>s+(Number(p.back)||0),0),
+    fl:   list.reduce((s,p)=>s+floorPay(p),0)
   };
 }
+const doneOrder = () => S.pts.filter(p=>p.done).sort((a,b)=>(a.ts||0)-(b.ts||0));
 
+/* ---------- отрисовка ---------- */
 function render(){
   const a = document.getElementById('app'), b = document.getElementById('bar');
-  if(S.stage==='prep')  { renderPrep(a,b); }
-  else if(S.stage==='run'){ renderRun(a,b); }
-  else                  { renderFin(a,b); }
+  if(S.stage==='prep')       renderPrep(a,b);
+  else if(S.stage==='run')   renderRun(a,b);
+  else                       renderFin(a,b);
   save();
 }
 
@@ -165,14 +255,15 @@ function renderPrep(a,b){
     </div>
     <div class="load">
       <h3>Грузить на заводе</h3>
-      ${byWater().map(([w,q])=>`<div class="lr"><span>${w}</span><b>${q}</b></div>`).join('')}
+      ${byWater().map(([w,q])=>`<div class="lr"><span>${esc(w)}</span><b>${q+SPARE}</b></div>
+        <div class="lr" style="padding-top:0"><i>по заявкам ${q} + запас ${SPARE}</i></div>`).join('')}
     </div>
     <div class="muted small" style="margin-bottom:10px">Пока не нажал «Я в рейсе» — список может меняться.</div>
     ${S.pts.map(cardPrep).join('')}`;
   b.innerHTML = `<button class="b-main" onclick="start()">Я в рейсе · ${t.q} бут.</button>`;
 }
 const cardPrep = p => `<div class="pt"><div class="hd">
-    <div class="addr">${p.addr}<div class="muted tiny" style="font-weight:400">${p.vill} · ${water(p)}</div></div>
+    <div class="addr">${esc(p.addr)}<div class="muted tiny" style="font-weight:400">${esc(p.vill)} · ${esc(water(p))}${floorOf(p)?` · ${floorOf(p)} этаж`:''}</div></div>
     <div class="amt">${money(sum(p))}</div>
     <span class="tag ${p.pay==='cash'?'t-cash':'t-card'}">${p.pay==='cash'?'наличные':'перевод'}</span>
   </div></div>`;
@@ -181,7 +272,7 @@ function renderRun(a,b){
   const t = totals(), left = S.pts.filter(p=>!p.done).length;
   const byV = {};
   S.pts.forEach(p=>{ (byV[p.vill] = byV[p.vill]||[]).push(p); });
-  Object.values(byV).forEach(l => l.sort((a,b) => streetRank(a.addr) - streetRank(b.addr)));
+  Object.values(byV).forEach(l => l.sort((x,y) => streetRank(x.addr) - streetRank(y.addr)));
   a.innerHTML = `<h1>Рейс · ${t.q} бут.</h1>
     <div class="sum">
       <div class="muted small">Всего по рейсу</div>
@@ -190,54 +281,90 @@ function renderRun(a,b){
         <div class="pill cash"><span class="muted tiny">наличными</span><b>${money(t.cash)}</b></div>
         <div class="pill card"><span class="muted tiny">переводом</span><b>${money(t.card)}</b></div>
       </div>
-      <div class="loadmini">Загружено: ${byWater().map(([w,q])=>w+' '+q).join(' · ')}</div>
+      <div class="loadmini">Погрузка: ${byWater().map(([w,q])=>esc(w)+' '+(q+SPARE)).join(' · ')} (с запасом ${SPARE})</div>
+      ${S.started?`<div class="loadmini">В рейсе с ${tm(S.started)} · ${dur(Date.now()-S.started)}</div>`:''}
     </div>
     <div class="muted small">Осталось точек: <b>${left}</b> из ${t.n}</div>
-    ${Object.keys(byV).map(v=>`<div class="vill">${v}</div>`+byV[v].map(cardRun).join('')).join('')}`;
+    ${Object.keys(byV).map(v=>`<div class="vill">${esc(v)}</div>`+byV[v].map(cardRun).join('')).join('')}`;
   b.innerHTML = left
     ? `<button class="b-ghost" style="width:100%" onclick="finish()">Развоз закончен · осталось ${left}</button>`
     : `<button class="b-main" onclick="finish()">Развоз закончен</button>`;
 }
-const cardRun = p => `<div class="pt ${p.done?'done':''} ${S.open===p.id?'open':''}" id="p${p.id}">
+
+const cardRun = p => {
+  const nl = navLink(p), f = floorOf(p);
+  return `<div class="pt ${p.done?'done':''} ${S.open===p.id?'open':''}" id="p${p.id}">
   <div class="hd" onclick="toggle(${p.id})">
-    <div class="addr">${p.addr}<div class="muted tiny" style="font-weight:400">${water(p)}</div></div>
+    <div class="addr">${esc(p.addr)}<div class="muted tiny" style="font-weight:400">${esc(water(p))}${p.done&&p.ts?` · ${tm(p.ts)}`:''}</div></div>
     <div class="amt">${money(sum(p))}</div>
     <span class="tag ${p.pay==='cash'?'t-cash':'t-card'}">${p.pay==='cash'?'наличные':'перевод'}</span>
   </div>
   <div class="bd">
-    ${p.name?`<div class="kv"><span class="muted">Клиент</span><span>${p.name}</span></div>`:''}
-    ${p.tel?`<div class="kv"><span class="muted">Телефон</span><a class="tel" href="tel:${p.tel}">${p.tel}</a></div>`:''}
-    <div class="kv"><span class="muted">Везём</span><span>${water(p)}</span></div>
+    ${p.name?`<div class="kv"><span class="muted">Клиент</span><span>${esc(p.name)}</span></div>`:''}
+    <div class="kv"><span class="muted">Везём</span><span>${esc(water(p))}</span></div>
+    ${p.apt?`<div class="apt">
+      ${p.apt.flat ?`<div class="ar"><span class="muted">Квартира</span><b>${esc(p.apt.flat)}</b></div>`:''}
+      ${p.apt.ent  ?`<div class="ar"><span class="muted">Подъезд</span><b>${esc(p.apt.ent)}</b></div>`:''}
+      ${f          ?`<div class="ar"><span class="muted">Этаж</span><b class="big2">${f}</b></div>`:''}
+      ${p.apt.code ?`<div class="ar"><span class="muted">Домофон</span><b class="big2">${esc(p.apt.code)}</b></div>`:''}
+      ${p.apt.acc  ?`<div class="ar"><span class="muted">Доступ</span><b>${esc(p.apt.acc)}</b></div>`:''}
+    </div>`:''}
+    ${f?`<div class="kv"><span class="muted">Вода / занос</span><span>${money(waterSum(p))} + ${money(floorFee(p))}<div class="muted tiny">${f} эт. × ${FLOOR_RATE} ₽ × ${qty(p)} бут.</div></span></div>`:''}
     <div class="kv"><span class="muted">Оплата</span><span>${p.pay==='cash'?'наличные':'перевод'}</span></div>
     <div class="paysw">
       <button class="${p.pay==='card'?'on':''}" onclick="setPay(${p.id},'card')">Перевод</button>
       <button class="${p.pay==='cash'?'on':''}" onclick="setPay(${p.id},'cash')">Наличные</button>
     </div>
-    ${p.tara?`<div class="kv"><span class="muted">Тара</span><span>${p.tara}</span></div>`:''}
-    ${p.note?`<div class="kv"><span class="muted">Комментарий</span><span>${p.note}</span></div>`:''}
+    ${p.note?`<div class="kv" style="margin-top:8px"><span class="muted">Комментарий</span><span>${esc(p.note)}</span></div>`:''}
+
+    <div class="plus">
+      <span>Отдал больше заявки<br><span class="muted tiny">заказано ${ordered(p)}, отдано ${qty(p)}</span></span>
+      ${(p.extra||0)?`<button onclick="addBottle(${p.id},-1)">−1</button>`:''}
+      <button class="add" onclick="addBottle(${p.id},1)">+1 бутыль</button>
+    </div>
+
     <div class="tara"><span class="small">Забрал пустой тары</span>
       <input type="number" inputmode="numeric" min="0" value="${p.back===null?'':p.back}"
              placeholder="${qty(p)}" onchange="setBack(${p.id},this.value)"></div>
+
+    <label class="odd">
+      <input type="checkbox" ${p.odd?'checked':''} onchange="setOdd(${p.id},this.checked)">
+      <span>Время нетипичное<br><span class="muted tiny">точка не пойдёт в статистику маршрута</span></span>
+    </label>
+    ${p.odd?`<input class="oddc" value="${esc(p.oddNote)}" placeholder="почему задержался" onchange="setOddNote(${p.id},this.value)">`:''}
+
+    <div class="acts">
+      ${nl?`<a class="nav" href="${esc(nl)}" target="_blank" rel="noopener">Маршрут</a>`
+          :`<button onclick="alert('Для этого адреса не задана деревня на карте. Нужен полный адрес от менеджера.')">Маршрут</button>`}
+      <a href="tel:${esc(MANAGER_TEL)}">Менеджер</a>
+    </div>
+
     ${p.done
       ? `<button class="b-undo" onclick="undo(${p.id})">Отменить доставку</button>`
       : `<button class="b-ok" onclick="deliver(${p.id})">Доставлено</button>`}
   </div></div>`;
+};
 
 function renderFin(a,b){
   const d = totals(p=>p.done), t = totals();
-  const earned = d.q * PAY_PER_BOTTLE;
-  const costs = S.costs.reduce((x,c)=>x+(Number(c.amt)||0),0);
-  const diff = d.cash - earned - costs;
+  const earned = d.q * PAY_PER_BOTTLE + d.fl;
+  const costs  = S.costs.reduce((x,c)=>x+(Number(c.amt)||0),0);
+  const diff   = d.cash - earned - costs;
+  const total  = (S.started && S.ended) ? S.ended - S.started : 0;
   a.innerHTML = `<h1 class="fin">Развоз закончен</h1><div class="fin">
     <div class="line"><span>Доставлено</span><b>${d.n} из ${t.n} · ${d.q} бут.</b></div>
+    ${total?`<div class="line"><span>В рейсе</span><b class="y">${dur(total)}</b></div>
+    <div class="line"><span>В среднем на точку</span><b>${d.n?dur(total/d.n):'—'}</b></div>`:''}
     <div class="line"><span>Наличных на руках</span><b class="g">${money(d.cash)}</b></div>
     <div class="line"><span>Переводом (шефу напрямую)</span><b class="b">${money(d.card)}</b></div>
-    <div class="line"><span>Заработал · ${PAY_PER_BOTTLE} ₽ × ${d.q}</span><b>${money(earned)}</b></div>
+    <div class="line"><span>Заработал · ${PAY_PER_BOTTLE} ₽ × ${d.q}</span><b>${money(d.q*PAY_PER_BOTTLE)}</b></div>
+    ${d.fl?`<div class="line"><span>Заносы</span><b>${money(d.fl)}</b></div>`:''}
+    ${d.fl?`<div class="line"><span>Итого заработал</span><b class="y">${money(earned)}</b></div>`:''}
 
     <div class="cst">
       <h3>Расходы водителя</h3>
       ${S.costs.map((c,i)=>`<div class="crow">
-        <input class="w" value="${(c.what||'').replace(/"/g,'&quot;')}" placeholder="за что" onchange="setCost(${i},'what',this.value)">
+        <input class="w" value="${esc(c.what)}" placeholder="за что" onchange="setCost(${i},'what',this.value)">
         <input class="a" type="number" inputmode="numeric" value="${c.amt===''?'':c.amt}" placeholder="0" onchange="setCost(${i},'amt',this.value)">
         <button class="x" onclick="delCost(${i})">✕</button>
       </div>`).join('')}
@@ -258,39 +385,65 @@ function renderFin(a,b){
     <div class="line"><span>Выдал бутылей</span><b>${d.q}</b></div>
     <div class="line"><span>Забрал пустой тары</span><b>${d.back}</b></div>
     <div class="line"><span>Разница по таре</span><b class="${d.q-d.back?'r':''}">${d.q-d.back}</b></div>
-    <textarea id="rep" readonly style="margin-top:14px">${report(d,earned,costs,diff)}</textarea>
+    <textarea id="rep" readonly style="margin-top:14px">${esc(report(d,earned,costs,diff,total))}</textarea>
   </div>`;
   b.innerHTML = `<button class="b-main" onclick="copyRep()">Скопировать отчёт</button>
     <button class="b-ghost" style="width:100%;margin-top:8px" onclick="back()">Вернуться в рейс</button>`;
 }
-function addCost(w){ S.costs.push({what:w, amt:''}); render(); }
-function setCost(i,k,v){ S.costs[i][k] = (k==='amt' ? (v===''?'':Math.max(0,parseInt(v)||0)) : v); render(); }
-function delCost(i){ S.costs.splice(i,1); render(); }
 
-function report(d,earned,costs,diff){
-  const done = S.pts.filter(p=>p.done);
-  const cl = S.costs.filter(c=>Number(c.amt)>0).map(c=>`· ${c.what||'расход'} — ${money(Number(c.amt))}`).join('\n');
-  return `Рейс ${new Date().toLocaleDateString('ru-RU')}
-Доставлено: ${d.n} адр., ${d.q} бут.
-${done.map(p=>`· ${p.addr} — ${water(p)} — ${money(sum(p))} ${p.pay==='cash'?'наличные':'перевод'}${p.back!==null?`, тары ${p.back}`:''}`).join('\n')}
+function report(d,earned,costs,diff,total){
+  const done = doneOrder();
+  const cl = S.costs.filter(c=>Number(c.amt)>0)
+    .map(c=>`· ${c.what||'расход'} — ${money(Number(c.amt))}`).join('\n');
+  let prev = S.started;
+  const lines = done.map((p,i)=>{
+    const t = p.ts ? tm(p.ts) : '--:--';
+    const leg = (p.ts && prev) ? ' (' + dur(p.ts - prev) + ')' : '';
+    if(p.ts) prev = p.ts;
+    return `${i+1}. ${t}${leg} ${p.addr} — ${water(p)} — ${money(sum(p))} ${p.pay==='cash'?'наличные':'перевод'}`
+      + (p.back!==null?`, тары ${p.back}`:'')
+      + (floorOf(p)?`, занос ${floorOf(p)} эт.`:'')
+      + ((p.extra||0)?`, отдано +${p.extra} сверх заявки`:'')
+      + (p.odd?`  [время нетипичное${p.oddNote?': '+p.oddNote:''}]`:'');
+  }).join('\n');
+  return `Рейс ${ROUTE_DATE.split('-').reverse().join('.')}
+Доставлено: ${d.n} адр., ${d.q} бут.${total?`\nВ рейсе: ${dur(total)}${S.started?` (с ${tm(S.started)} до ${tm(S.ended)})`:''}`:''}
+
+Порядок объезда:
+${lines}
 
 Наличными: ${money(d.cash)}
 Переводом: ${money(d.card)}
-Заработал: ${money(earned)}${cl?`\n\nРасходы водителя:\n${cl}\nИтого расходов: ${money(costs)}`:''}
+Заработал: ${money(d.q*PAY_PER_BOTTLE)}${d.fl?`\nЗаносы: ${money(d.fl)}\nИтого заработал: ${money(earned)}`:''}${cl?`\n\nРасходы водителя:\n${cl}\nИтого расходов: ${money(costs)}`:''}
 ${diff>=0?`Вернуть шефу: ${money(diff)}`:`Шеф должен водителю: ${money(-diff)}`}
 Тара: выдал ${d.q}, забрал ${d.back}, разница ${d.q-d.back}`;
 }
 
+/* ---------- действия ---------- */
 function toggle(id){ S.open = (S.open===id ? null : id); render(); }
-function setPay(id,v){ const p=S.pts.find(x=>x.id===id); p.pay=v; render(); }
-function setBack(id,v){ const p=S.pts.find(x=>x.id===id); p.back = v===''?null:Math.max(0,parseInt(v)||0); save(); }
-function deliver(id){ const p=S.pts.find(x=>x.id===id); p.done=true; if(p.back===null)p.back=qty(p); render(); }
-function undo(id){ const p=S.pts.find(x=>x.id===id); p.done=false; render(); }
-function start(){ S.stage='run'; S.started=Date.now(); render(); }
-function finish(){ S.stage='fin'; S.ended=Date.now(); render(); }
+function setPay(id,v){ pt(id).pay = v; render(); }
+function setBack(id,v){ pt(id).back = (v===''?null:Math.max(0,parseInt(v)||0)); save(); }
+function addBottle(id,dl){ const p = pt(id); p.extra = Math.max(0,(p.extra||0)+dl); render(); }
+function setOdd(id,v){ pt(id).odd = v; render(); }
+function setOddNote(id,v){ pt(id).oddNote = v; save(); }
+function deliver(id){
+  const p = pt(id);
+  p.done = true;
+  p.ts = p.ts || Date.now();
+  if(p.back === null) p.back = qty(p);
+  S.open = null;                 // карточка сворачивается
+  render();
+}
+function undo(id){ const p = pt(id); p.done = false; p.ts = null; render(); }
+function pt(id){ return S.pts.find(x=>x.id===id); }
+function addCost(w){ S.costs.push({what:w, amt:''}); render(); }
+function setCost(i,k,v){ S.costs[i][k] = (k==='amt' ? (v===''?'':Math.max(0,parseInt(v)||0)) : v); render(); }
+function delCost(i){ S.costs.splice(i,1); render(); }
+function start(){ S.stage='run'; S.started = S.started || Date.now(); render(); }
+function finish(){ S.stage='fin'; S.ended = Date.now(); render(); }
 function back(){ S.stage='run'; render(); }
 function copyRep(){
-  const t=document.getElementById('rep'); t.select(); t.setSelectionRange(0,99999);
+  const t = document.getElementById('rep'); t.select(); t.setSelectionRange(0,99999);
   try{ document.execCommand('copy'); alert('Отчёт скопирован'); }catch(e){ alert('Выдели текст и скопируй вручную'); }
 }
 render();
