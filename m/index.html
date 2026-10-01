@@ -566,10 +566,11 @@ function viewClients(a, b){
 // Список для «нового клиента» собираем из самого справочника, иначе он отстаёт
 // от жизни при каждой пересборке районов.
 const VILL_BASE = ['ОпаЕльня','Крутая','Ждановский','ТИЗ Надежда','Большая Ельня',
-                   'Культура','Опытный','Карповка','ЖК Времена года','Кстово','Город'];
+                   'Культура / Опытный','Карповка','ЖК Времена года','Кстово','Город',
+                   'Область','Свои'];
 function villList(){
   const seen = new Set(S.clients.map(c=>c.vill).filter(Boolean));
-  return [...VILL_BASE.filter(v=>true), ...[...seen].filter(v=>!VILL_BASE.includes(v)).sort()];
+  return [...VILL_BASE, ...[...seen].filter(v=>!VILL_BASE.includes(v)).sort()];
 }
 
 /* ---------- справочник: загрузка и копия ---------- */
@@ -626,7 +627,9 @@ function mergeClients(incoming){
         usual: Number(n.usual) || hit.usual || 0, rhythm: Number(n.rhythm) || hit.rhythm || 0,
         last: n.last || hit.last || '', status: n.status || hit.status || '',
         pay: n.pay || hit.pay || 'transfer', opt: !!n.opt,
-        note: n.note || hit.note || '', tare_notes: n.tare_notes || hit.tare_notes || ''
+        note: n.note || hit.note || '', tare_notes: n.tare_notes || hit.tare_notes || '',
+        // active:false в файле — это «убрать из списка». История клиента остаётся.
+        active: n.active !== false
       });
       upd++;
     } else {
