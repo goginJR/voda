@@ -73,10 +73,6 @@ button{font:inherit;border:0;border-radius:12px;padding:13px;font-weight:700;cur
 .plus button{background:#243352;color:#cfe0f7;padding:10px 14px;min-width:46px}
 .plus button.add{background:#16a34a;color:#fff}
 
-.odd{display:flex;align-items:center;gap:10px;margin-top:10px;background:#18243d;padding:10px;border-radius:12px;cursor:pointer}
-.odd input[type=checkbox]{width:22px;height:22px;accent-color:#2563eb}
-.odd span{flex:1;font-size:13px}
-.oddc{width:100%;margin-top:8px;background:#0b1220;border:1px solid #2b3c5e;color:#e8eef9;border-radius:10px;padding:10px;font:inherit;font-size:14px}
 
 .bar{position:fixed;left:0;right:0;bottom:0;background:#0b1220ee;backdrop-filter:blur(8px);padding:12px;border-top:1px solid #1b2944}
 .bar .wrap{padding:0}
@@ -117,8 +113,8 @@ textarea{width:100%;height:170px;background:#0b1220;color:#cfe0f7;border:1px sol
 /* ---------- настройки ---------- */
 const PAY_PER_BOTTLE   = 80;   // фикса водителю, ₽ за бутыль
 const FLOOR_RATE       = 20;   // с клиента: ₽ за этаж за бутыль
-const DRIVER_FLOOR_RATE= 20;   // водителю:  ₽ за этаж за бутыль  (Дима: 15 или 20 — поставлено 20)
-const SPARE            = 3;    // запас бутылей при погрузке       (размер не подтверждён)
+const DRIVER_FLOOR_RATE= 15;   // водителю:  ₽ за этаж за бутыль  (решение Димы 01.10: с клиента 20, водителю 15)
+const SPARE            = 3;    // запас бутылей при погрузке       (Дима: 3-4 на всякий случай)
 const MANAGER_TEL      = '+79870833737';  // «Связаться с менеджером» — проверить номер
 
 /* ---------- хранилище ----------
@@ -161,7 +157,7 @@ const STREETS = ['Ближняя','Радужная','Весенняя','Дал�
 const streetRank = a => { const i = STREETS.findIndex(x => a.startsWith(x)); return i < 0 ? 99 : i; };
 
 /* ---------- состояние ---------- */
-const mk = p => ({...p, done:false, back:null, extra:0, ts:null, odd:false, oddNote:''});
+const mk = p => ({...p, done:false, back:null, extra:0, ts:null});
 
 let S = load();
 function load(){
@@ -182,9 +178,7 @@ function load(){
       back:    (o.back === undefined ? null : o.back),
       pay:     o.pay || p.pay,
       extra:   Number(o.extra) || 0,
-      ts:      o.ts || null,
-      odd:     !!o.odd,
-      oddNote: o.oddNote || ''
+      ts:      o.ts || null
     };
   });
   return st;
@@ -256,7 +250,7 @@ function renderPrep(a,b){
     <div class="load">
       <h3>Грузить на заводе</h3>
       ${byWater().map(([w,q])=>`<div class="lr"><span>${esc(w)}</span><b>${q+SPARE}</b></div>
-        <div class="lr" style="padding-top:0"><i>по заявкам ${q} + запас ${SPARE}</i></div>`).join('')}
+        <div class="lr" style="padding-top:0"><i>по заявкам ${q} + запас ${SPARE} (можно ${SPARE+1})</i></div>`).join('')}
     </div>
     <div class="muted small" style="margin-bottom:10px">Пока не нажал «Я в рейсе» — список может меняться.</div>
     ${S.pts.map(cardPrep).join('')}`;
@@ -326,12 +320,6 @@ const cardRun = p => {
     <div class="tara"><span class="small">Забрал пустой тары</span>
       <input type="number" inputmode="numeric" min="0" value="${p.back===null?'':p.back}"
              placeholder="${qty(p)}" onchange="setBack(${p.id},this.value)"></div>
-
-    <label class="odd">
-      <input type="checkbox" ${p.odd?'checked':''} onchange="setOdd(${p.id},this.checked)">
-      <span>Время нетипичное<br><span class="muted tiny">точка не пойдёт в статистику маршрута</span></span>
-    </label>
-    ${p.odd?`<input class="oddc" value="${esc(p.oddNote)}" placeholder="почему задержался" onchange="setOddNote(${p.id},this.value)">`:''}
 
     <div class="acts">
       ${nl?`<a class="nav" href="${esc(nl)}" target="_blank" rel="noopener">Маршрут</a>`
@@ -403,8 +391,7 @@ function report(d,earned,costs,diff,total){
     return `${i+1}. ${t}${leg} ${p.addr} — ${water(p)} — ${money(sum(p))} ${p.pay==='cash'?'наличные':'перевод'}`
       + (p.back!==null?`, тары ${p.back}`:'')
       + (floorOf(p)?`, занос ${floorOf(p)} эт.`:'')
-      + ((p.extra||0)?`, отдано +${p.extra} сверх заявки`:'')
-      + (p.odd?`  [время нетипичное${p.oddNote?': '+p.oddNote:''}]`:'');
+      + ((p.extra||0)?`, отдано +${p.extra} сверх заявки`:'');
   }).join('\n');
   return `Рейс ${ROUTE_DATE.split('-').reverse().join('.')}
 Доставлено: ${d.n} адр., ${d.q} бут.${total?`\nВ рейсе: ${dur(total)}${S.started?` (с ${tm(S.started)} до ${tm(S.ended)})`:''}`:''}
@@ -424,8 +411,6 @@ function toggle(id){ S.open = (S.open===id ? null : id); render(); }
 function setPay(id,v){ pt(id).pay = v; render(); }
 function setBack(id,v){ pt(id).back = (v===''?null:Math.max(0,parseInt(v)||0)); save(); }
 function addBottle(id,dl){ const p = pt(id); p.extra = Math.max(0,(p.extra||0)+dl); render(); }
-function setOdd(id,v){ pt(id).odd = v; render(); }
-function setOddNote(id,v){ pt(id).oddNote = v; save(); }
 function deliver(id){
   const p = pt(id);
   p.done = true;
