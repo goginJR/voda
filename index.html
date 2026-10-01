@@ -69,6 +69,9 @@ button{font:inherit;border:0;border-radius:12px;padding:13px;font-weight:700;cur
 .g{color:#7ee787}.r{color:#ff9d9d}.b{color:#79c0ff}
 textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px solid #2b3c5e;border-radius:12px;padding:10px;font:13px/1.4 ui-monospace,monospace}
 .hide{display:none}
+.paysw{display:flex;gap:8px;margin-top:10px}
+.paysw button{flex:1;background:#18243d;color:#8da2c0;padding:11px}
+.paysw button.on{background:#2563eb;color:#fff}
 </style>
 </head>
 <body>
@@ -77,20 +80,20 @@ textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px sol
 
 <script>
 const PAY_PER_BOTTLE = 80;          // фикса водителю, ₽ за бутыль
-const KEY = 'reis-2026-10-01-v4';
+const KEY = 'reis-2026-10-01-v5';
 
 // Заявки на 01.10.2026 — разобраны из группы «ЗАЯВКИ»
 const SEED = [
-  {id:1,  vill:'ОпаЕльня',   addr:'Ближняя 27',          name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:5,p:200}],  tara:'', note:'с 30.09'},
-  {id:2,  vill:'ОпаЕльня',   addr:'Радужная 15',         name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:3,p:200}],  tara:'', note:''},
-  {id:3,  vill:'ОпаЕльня',   addr:'Радужная 21',         name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:3,p:200}],  tara:'', note:'заявка 12:37'},
+  {id:1,  vill:'ОпаЕльня',   addr:'Ближняя 27',          name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:5,p:200}],  tara:'', note:'с 30.09'},
+  {id:2,  vill:'ОпаЕльня',   addr:'Радужная 15',         name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:3,p:200}],  tara:'', note:''},
+  {id:3,  vill:'ОпаЕльня',   addr:'Радужная 21',         name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:3,p:200}],  tara:'', note:'заявка 12:37'},
   {id:4,  vill:'ОпаЕльня',   addr:'Садовая 1',           name:'Ибрагимова Татьяна Александровна', tel:'89202920020', pay:'card', items:[{w:'Идель',q:4,p:200}], tara:'есть', note:''},
-  {id:5,  vill:'ОпаЕльня',   addr:'Светлая 280',         name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:4,p:200}],  tara:'', note:'висит с 28.09'},
-  {id:6,  vill:'ОпаЕльня',   addr:'Светлая 94',          name:'Татьяна Николаевна',     tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
+  {id:5,  vill:'ОпаЕльня',   addr:'Светлая 280',         name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:4,p:200}],  tara:'', note:'висит с 28.09'},
+  {id:6,  vill:'ОпаЕльня',   addr:'Светлая 94',          name:'Татьяна Николаевна',     tel:'',             pay:'card', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
   {id:7,  vill:'сп Культура',addr:'Молодёжная 1, кв. 30',name:'Кабанова Нина Васильевна', tel:'89524496923', pay:'card', items:[{w:'Идель',q:2,p:200}], tara:'есть', note:'4 этаж, домофон 32705'},
-  {id:8,  vill:'сп Культура',addr:'Изумрудная 20к2',     name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
+  {id:8,  vill:'сп Культура',addr:'Изумрудная 20к2',     name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
   {id:9,  vill:'Крутая',     addr:'Ясная 19',            name:'Одинцова Ольга',         tel:'+79202941877', pay:'card', items:[{w:'Идель',q:1,p:200},{w:'Дивеево',q:1,p:250}], tara:'есть', note:''},
-  {id:10, vill:'Крутая',     addr:'Калиновая 27',        name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}],  tara:'', note:''},
+  {id:10, vill:'Крутая',     addr:'Калиновая 27',        name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:2,p:200}],  tara:'', note:''},
   {id:11, vill:'Ждановский', addr:'Кленовая 5/2',        name:'Коломенцев Антон Владимирович', tel:'+79503616463', pay:'card', items:[{w:'Идель',q:4,p:200}], tara:'есть', note:''},
   {id:12, vill:'Кстово',     addr:'Ступишина 2А к 6',    name:'ЧПУ «Комплекс»',         tel:'',             pay:'card', items:[{w:'Идель',q:10,p:200}], tara:'', note:'новый адрес, висит с 29.09'}
 ];
@@ -102,7 +105,7 @@ const streetRank = a => { const i = STREETS.findIndex(x => a.startsWith(x)); ret
 let S = load();
 function load(){
   try{ const r = localStorage.getItem(KEY); if(r) return JSON.parse(r); }catch(e){}
-  return {stage:'prep', pts: SEED.map(p=>({...p, done:false, back:null})), started:null, ended:null};
+  return {stage:'prep', open:null, pts: SEED.map(p=>({...p, done:false, back:null})), started:null, ended:null};
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
@@ -146,7 +149,7 @@ function renderPrep(a,b){
 const cardPrep = p => `<div class="pt"><div class="hd">
     <div class="addr">${p.addr}<div class="muted tiny" style="font-weight:400">${p.vill} · ${water(p)}</div></div>
     <div class="amt">${money(sum(p))}</div>
-    <span class="tag ${p.pay==='cash'?'t-cash':'t-card'}">${p.pay==='cash'?'нал':'безнал'}</span>
+    <span class="tag ${p.pay==='cash'?'t-cash':'t-card'}">${p.pay==='cash'?'наличные':'перевод'}</span>
   </div></div>`;
 
 function renderRun(a,b){
@@ -169,17 +172,21 @@ function renderRun(a,b){
     ? `<button class="b-ghost" style="width:100%" onclick="finish()">Развоз закончен · осталось ${left}</button>`
     : `<button class="b-main" onclick="finish()">Развоз закончен</button>`;
 }
-const cardRun = p => `<div class="pt ${p.done?'done':''}" id="p${p.id}">
+const cardRun = p => `<div class="pt ${p.done?'done':''} ${S.open===p.id?'open':''}" id="p${p.id}">
   <div class="hd" onclick="toggle(${p.id})">
     <div class="addr">${p.addr}<div class="muted tiny" style="font-weight:400">${water(p)}</div></div>
     <div class="amt">${money(sum(p))}</div>
-    <span class="tag ${p.pay==='cash'?'t-cash':'t-card'}">${p.pay==='cash'?'нал':'безнал'}</span>
+    <span class="tag ${p.pay==='cash'?'t-cash':'t-card'}">${p.pay==='cash'?'наличные':'перевод'}</span>
   </div>
   <div class="bd">
     ${p.name?`<div class="kv"><span class="muted">Клиент</span><span>${p.name}</span></div>`:''}
     ${p.tel?`<div class="kv"><span class="muted">Телефон</span><a class="tel" href="tel:${p.tel}">${p.tel}</a></div>`:''}
     <div class="kv"><span class="muted">Везём</span><span>${water(p)}</span></div>
     <div class="kv"><span class="muted">Оплата</span><span>${p.pay==='cash'?'наличные':'перевод'}</span></div>
+    <div class="paysw">
+      <button class="${p.pay==='card'?'on':''}" onclick="setPay(${p.id},'card')">Перевод</button>
+      <button class="${p.pay==='cash'?'on':''}" onclick="setPay(${p.id},'cash')">Наличные</button>
+    </div>
     ${p.tara?`<div class="kv"><span class="muted">Тара</span><span>${p.tara}</span></div>`:''}
     ${p.note?`<div class="kv"><span class="muted">Комментарий</span><span>${p.note}</span></div>`:''}
     <div class="tara"><span class="small">Забрал пустой тары</span>
@@ -217,7 +224,7 @@ function report(d,earned,diff){
   const done = S.pts.filter(p=>p.done);
   return `Рейс ${new Date().toLocaleDateString('ru-RU')}
 Доставлено: ${d.n} адр., ${d.q} бут.
-${done.map(p=>`· ${p.addr} — ${water(p)} — ${money(sum(p))} ${p.pay==='cash'?'нал':'перевод'}${p.back!==null?`, тары ${p.back}`:''}`).join('\n')}
+${done.map(p=>`· ${p.addr} — ${water(p)} — ${money(sum(p))} ${p.pay==='cash'?'наличные':'перевод'}${p.back!==null?`, тары ${p.back}`:''}`).join('\n')}
 
 Наличными: ${money(d.cash)}
 Переводом: ${money(d.card)}
@@ -226,7 +233,8 @@ ${diff>=0?`Вернуть шефу: ${money(diff)}`:`Шеф должен на к
 Тара: выдал ${d.q}, забрал ${d.back}, разница ${d.q-d.back}`;
 }
 
-function toggle(id){ const e=document.getElementById('p'+id); e.classList.toggle('open'); }
+function toggle(id){ S.open = (S.open===id ? null : id); render(); }
+function setPay(id,v){ const p=S.pts.find(x=>x.id===id); p.pay=v; render(); }
 function setBack(id,v){ const p=S.pts.find(x=>x.id===id); p.back = v===''?null:Math.max(0,parseInt(v)||0); save(); }
 function deliver(id){ const p=S.pts.find(x=>x.id===id); p.done=true; if(p.back===null)p.back=qty(p); render(); }
 function undo(id){ const p=S.pts.find(x=>x.id===id); p.done=false; render(); }
