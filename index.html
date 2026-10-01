@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1220">
+<title>Рейс</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:#0b1220;color:#e8eef9;
+  font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  padding:0 0 110px;
+}
+.wrap{max-width:560px;margin:0 auto;padding:12px}
+h1{font-size:19px;margin:4px 0 12px;font-weight:700}
+.muted{color:#8da2c0}
+.small{font-size:13px}
+.tiny{font-size:12px}
+
+.sum{background:#111c31;border-radius:16px;padding:14px;margin-bottom:12px}
+.sum .big{font-size:34px;font-weight:800;letter-spacing:-.5px}
+.row{display:flex;gap:10px}
+.row>div{flex:1}
+.pill{background:#18243d;border-radius:12px;padding:9px 11px}
+.pill b{display:block;font-size:19px;margin-top:2px}
+.cash b{color:#7ee787}
+.card b{color:#79c0ff}
+
+.vill{margin:18px 0 8px;font-size:13px;letter-spacing:.9px;text-transform:uppercase;color:#8da2c0;font-weight:700}
+
+.pt{background:#111c31;border-radius:14px;margin-bottom:10px;overflow:hidden;border:1px solid #1b2944}
+.pt.done{opacity:.5}
+.pt.done .addr{text-decoration:line-through}
+.hd{padding:13px 14px;display:flex;align-items:center;gap:10px;cursor:pointer}
+.hd .addr{font-weight:700;flex:1;font-size:16px}
+.hd .amt{font-weight:800;white-space:nowrap}
+.tag{font-size:11px;padding:2px 7px;border-radius:999px;font-weight:700}
+.t-cash{background:#13351f;color:#7ee787}
+.t-card{background:#122a44;color:#79c0ff}
+.bd{padding:0 14px 14px;display:none}
+.pt.open .bd{display:block}
+.kv{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #1b2944}
+.kv:last-of-type{border:0}
+a.tel{color:#79c0ff;text-decoration:none;font-weight:700}
+
+button{font:inherit;border:0;border-radius:12px;padding:13px;font-weight:700;cursor:pointer}
+.b-main{background:#2563eb;color:#fff;width:100%;font-size:17px;padding:17px}
+.b-ok{background:#16a34a;color:#fff;width:100%;margin-top:10px}
+.b-undo{background:#243352;color:#cfe0f7;width:100%;margin-top:10px}
+.b-ghost{background:#18243d;color:#cfe0f7}
+.b-red{background:#7f1d1d;color:#fecaca}
+
+.tara{display:flex;align-items:center;gap:10px;margin-top:12px;background:#18243d;padding:10px;border-radius:12px}
+.tara span{flex:1}
+.tara input{width:72px;background:#0b1220;border:1px solid #2b3c5e;color:#e8eef9;border-radius:10px;padding:10px;font-size:19px;text-align:center;font-weight:700}
+
+.bar{position:fixed;left:0;right:0;bottom:0;background:#0b1220ee;backdrop-filter:blur(8px);padding:12px;border-top:1px solid #1b2944}
+.bar .wrap{padding:0}
+
+.fin .line{display:flex;justify-content:space-between;padding:11px 0;border-bottom:1px solid #1b2944;font-size:17px}
+.fin .line b{font-weight:800}
+.fin .hero{background:#111c31;border-radius:16px;padding:16px;margin:14px 0;text-align:center}
+.fin .hero .big{font-size:32px;font-weight:800;margin-top:4px}
+.g{color:#7ee787}.r{color:#ff9d9d}.b{color:#79c0ff}
+textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px solid #2b3c5e;border-radius:12px;padding:10px;font:13px/1.4 ui-monospace,monospace}
+.hide{display:none}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="bar"><div class="wrap" id="bar"></div></div>
+
+<script>
+const PAY_PER_BOTTLE = 80;          // фикса водителю, ₽ за бутыль
+const KEY = 'reis-2026-10-01-v1';
+
+// Заявки на 01.10.2026 — разобраны из группы «ЗАЯВКИ»
+const SEED = [
+  {id:1, vill:'—',          addr:'Калиновая 27',        name:'',                      tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}], tara:'', note:''},
+  {id:2, vill:'сп Культура',addr:'Молодёжная 1, кв. 30',name:'Кабанова Нина Васильевна',tel:'89524496923', pay:'card', items:[{w:'Идель',q:2,p:200}], tara:'есть', note:'4 этаж, домофон 32705'},
+  {id:3, vill:'М. Ельня',   addr:'Садовая 1',           name:'Ибрагимова Татьяна Александровна',tel:'89202920020',pay:'card',items:[{w:'Идель',q:4,p:200}], tara:'есть', note:''},
+  {id:4, vill:'—',          addr:'Радужная 15',         name:'',                      tel:'',             pay:'cash', items:[{w:'Идель',q:3,p:200}], tara:'', note:''},
+  {id:5, vill:'Крутая',     addr:'Ясная 19',            name:'Одинцова Ольга',        tel:'+79202941877', pay:'card', items:[{w:'Идель',q:1,p:200},{w:'Дивеево',q:1,p:250}], tara:'есть', note:''},
+  {id:6, vill:'Ждановский', addr:'Кленовая 5/2',        name:'Коломенцев Антон Владимирович',tel:'+79503616463',pay:'card',items:[{w:'Идель',q:4,p:200}], tara:'есть', note:''}
+];
+
+let S = load();
+function load(){
+  try{ const r = localStorage.getItem(KEY); if(r) return JSON.parse(r); }catch(e){}
+  return {stage:'prep', pts: SEED.map(p=>({...p, done:false, back:null})), started:null, ended:null};
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
+
+const qty = p => p.items.reduce((s,i)=>s+i.q,0);
+const sum = p => p.items.reduce((s,i)=>s+i.q*i.p,0);
+const money = n => n.toLocaleString('ru-RU')+' ₽';
+const water = p => p.items.map(i=>i.w+' '+i.q).join(' + ');
+
+function totals(only){
+  const list = only ? S.pts.filter(only) : S.pts;
+  return {
+    n: list.length,
+    q: list.reduce((s,p)=>s+qty(p),0),
+    all: list.reduce((s,p)=>s+sum(p),0),
+    cash: list.filter(p=>p.pay==='cash').reduce((s,p)=>s+sum(p),0),
+    card: list.filter(p=>p.pay==='card').reduce((s,p)=>s+sum(p),0),
+    back: list.reduce((s,p)=>s+(Number(p.back)||0),0)
+  };
+}
+
+function render(){
+  const a = document.getElementById('app'), b = document.getElementById('bar');
+  if(S.stage==='prep')  { renderPrep(a,b); }
+  else if(S.stage==='run'){ renderRun(a,b); }
+  else                  { renderFin(a,b); }
+  save();
+}
+
+function renderPrep(a,b){
+  const t = totals();
+  a.innerHTML = `<h1>Заявки на сегодня</h1>
+    <div class="sum">
+      <div class="muted small">К развозу</div>
+      <div class="big">${t.q} бут.</div>
+      <div class="muted small" style="margin-top:2px">${t.n} адресов · ${money(t.all)}</div>
+    </div>
+    <div class="muted small" style="margin-bottom:10px">Пока не нажал «Я в рейсе» — список может меняться.</div>
+    ${S.pts.map(cardPrep).join('')}`;
+  b.innerHTML = `<button class="b-main" onclick="start()">Я в рейсе · ${t.q} бут.</button>`;
+}
+const cardPrep = p => `<div class="pt"><div class="hd">
+    <div class="addr">${p.addr}<div class="muted tiny" style="font-weight:400">${p.vill} · ${water(p)}</div></div>
+    <div class="amt">${money(sum(p))}</div>
+    <span class="tag ${p.pay==='cash'?'t-cash':'t-card'}">${p.pay==='cash'?'нал':'безнал'}</span>
+  </div></div>`;
+
+function renderRun(a,b){
+  const t = totals(), left = S.pts.filter(p=>!p.done).length;
+  const byV = {};
+  S.pts.forEach(p=>{ (byV[p.vill] = byV[p.vill]||[]).push(p); });
+  a.innerHTML = `<h1>Рейс · ${t.q} бут.</h1>
+    <div class="sum">
+      <div class="muted small">Всего по рейсу</div>
+      <div class="big">${money(t.all)}</div>
+      <div class="row" style="margin-top:12px">
+        <div class="pill cash"><span class="muted tiny">наличными</span><b>${money(t.cash)}</b></div>
+        <div class="pill card"><span class="muted tiny">переводом</span><b>${money(t.card)}</b></div>
+      </div>
+    </div>
+    <div class="muted small">Осталось точек: <b>${left}</b> из ${t.n}</div>
+    ${Object.keys(byV).map(v=>`<div class="vill">${v}</div>`+byV[v].map(cardRun).join('')).join('')}`;
+  b.innerHTML = left
+    ? `<button class="b-ghost" style="width:100%" onclick="finish()">Развоз закончен · осталось ${left}</button>`
+    : `<button class="b-main" onclick="finish()">Развоз закончен</button>`;
+}
+const cardRun = p => `<div class="pt ${p.done?'done':''}" id="p${p.id}">
+  <div class="hd" onclick="toggle(${p.id})">
+    <div class="addr">${p.addr}<div class="muted tiny" style="font-weight:400">${water(p)}</div></div>
+    <div class="amt">${money(sum(p))}</div>
+    <span class="tag ${p.pay==='cash'?'t-cash':'t-card'}">${p.pay==='cash'?'нал':'безнал'}</span>
+  </div>
+  <div class="bd">
+    ${p.name?`<div class="kv"><span class="muted">Клиент</span><span>${p.name}</span></div>`:''}
+    ${p.tel?`<div class="kv"><span class="muted">Телефон</span><a class="tel" href="tel:${p.tel}">${p.tel}</a></div>`:''}
+    <div class="kv"><span class="muted">Везём</span><span>${water(p)}</span></div>
+    <div class="kv"><span class="muted">Оплата</span><span>${p.pay==='cash'?'наличные':'перевод'}</span></div>
+    ${p.tara?`<div class="kv"><span class="muted">Тара</span><span>${p.tara}</span></div>`:''}
+    ${p.note?`<div class="kv"><span class="muted">Комментарий</span><span>${p.note}</span></div>`:''}
+    <div class="tara"><span class="small">Забрал пустой тары</span>
+      <input type="number" inputmode="numeric" min="0" value="${p.back===null?'':p.back}"
+             placeholder="${qty(p)}" onchange="setBack(${p.id},this.value)"></div>
+    ${p.done
+      ? `<button class="b-undo" onclick="undo(${p.id})">Отменить доставку</button>`
+      : `<button class="b-ok" onclick="deliver(${p.id})">Доставлено</button>`}
+  </div></div>`;
+
+function renderFin(a,b){
+  const d = totals(p=>p.done), t = totals();
+  const earned = d.q * PAY_PER_BOTTLE;
+  const diff = d.cash - earned;
+  a.innerHTML = `<h1 class="fin">Развоз закончен</h1><div class="fin">
+    <div class="line"><span>Доставлено</span><b>${d.n} из ${t.n} · ${d.q} бут.</b></div>
+    <div class="line"><span>Наличных на руках</span><b class="g">${money(d.cash)}</b></div>
+    <div class="line"><span>Переводом (шефу напрямую)</span><b class="b">${money(d.card)}</b></div>
+    <div class="line"><span>Заработал · ${PAY_PER_BOTTLE} ₽ × ${d.q}</span><b>${money(earned)}</b></div>
+    <div class="hero">
+      ${diff >= 0
+        ? `<div class="muted">Вернуть шефу</div><div class="big g">${money(diff)}</div>`
+        : `<div class="muted">Требовать с шефа на карту</div><div class="big r">${money(-diff)}</div>`}
+    </div>
+    <div class="line"><span>Выдал бутылей</span><b>${d.q}</b></div>
+    <div class="line"><span>Забрал пустой тары</span><b>${d.back}</b></div>
+    <div class="line"><span>Разница по таре</span><b class="${d.q-d.back?'r':''}">${d.q-d.back}</b></div>
+    <textarea id="rep" readonly style="margin-top:14px">${report(d,earned,diff)}</textarea>
+  </div>`;
+  b.innerHTML = `<button class="b-main" onclick="copyRep()">Скопировать отчёт</button>
+    <button class="b-ghost" style="width:100%;margin-top:8px" onclick="back()">Вернуться в рейс</button>`;
+}
+
+function report(d,earned,diff){
+  const done = S.pts.filter(p=>p.done);
+  return `Рейс ${new Date().toLocaleDateString('ru-RU')}
+Доставлено: ${d.n} адр., ${d.q} бут.
+${done.map(p=>`· ${p.addr} — ${water(p)} — ${money(sum(p))} ${p.pay==='cash'?'нал':'перевод'}${p.back!==null?`, тары ${p.back}`:''}`).join('\n')}
+
+Наличными: ${money(d.cash)}
+Переводом: ${money(d.card)}
+Заработал: ${money(earned)}
+${diff>=0?`Вернуть шефу: ${money(diff)}`:`Шеф должен на карту: ${money(-diff)}`}
+Тара: выдал ${d.q}, забрал ${d.back}, разница ${d.q-d.back}`;
+}
+
+function toggle(id){ const e=document.getElementById('p'+id); e.classList.toggle('open'); }
+function setBack(id,v){ const p=S.pts.find(x=>x.id===id); p.back = v===''?null:Math.max(0,parseInt(v)||0); save(); }
+function deliver(id){ const p=S.pts.find(x=>x.id===id); p.done=true; if(p.back===null)p.back=qty(p); render(); }
+function undo(id){ const p=S.pts.find(x=>x.id===id); p.done=false; render(); }
+function start(){ S.stage='run'; S.started=Date.now(); render(); }
+function finish(){ S.stage='fin'; S.ended=Date.now(); render(); }
+function back(){ S.stage='run'; render(); }
+function copyRep(){
+  const t=document.getElementById('rep'); t.select(); t.setSelectionRange(0,99999);
+  try{ document.execCommand('copy'); alert('Отчёт скопирован'); }catch(e){ alert('Выдели текст и скопируй вручную'); }
+}
+render();
+if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));}
+</script>
+</body>
+</html>
