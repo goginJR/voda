@@ -81,6 +81,13 @@ textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px sol
 .crow .x{width:42px;background:#243352;color:#ff9d9d;padding:0}
 .quick{display:flex;gap:6px;flex-wrap:wrap}
 .quick button{background:#18243d;color:#cfe0f7;padding:9px 12px;font-size:13px}
+.load{background:#16233f;border:1px solid #2b3c5e;border-radius:16px;padding:14px;margin-bottom:12px}
+.load h3{margin:0 0 10px;font-size:13px;letter-spacing:.9px;text-transform:uppercase;color:#9fc3ff}
+.load .lr{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid #22304d}
+.load .lr:last-child{border:0}
+.load .lr span{font-size:17px;font-weight:700}
+.load .lr b{font-size:26px;font-weight:800}
+.loadmini{font-size:13px;color:#9fc3ff;margin-top:6px}
 </style>
 </head>
 <body>
@@ -89,7 +96,7 @@ textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px sol
 
 <script>
 const PAY_PER_BOTTLE = 80;          // фикса водителю, ₽ за бутыль
-const KEY = 'reis-2026-10-01-v6';
+const KEY = 'reis-2026-10-01-v7';
 
 // Заявки на 01.10.2026 — разобраны из группы «ЗАЯВКИ»
 const SEED = [
@@ -122,6 +129,11 @@ const qty = p => p.items.reduce((s,i)=>s+i.q,0);
 const sum = p => p.items.reduce((s,i)=>s+i.q*i.p,0);
 const money = n => n.toLocaleString('ru-RU')+' ₽';
 const water = p => p.items.map(i=>i.w+' '+i.q).join(' + ');
+function byWater(list){
+  const m = {};
+  (list||S.pts).forEach(p => p.items.forEach(i => { m[i.w] = (m[i.w]||0) + i.q; }));
+  return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+}
 
 function totals(only){
   const list = only ? S.pts.filter(only) : S.pts;
@@ -151,6 +163,10 @@ function renderPrep(a,b){
       <div class="big">${t.q} бут.</div>
       <div class="muted small" style="margin-top:2px">${t.n} адресов · ${money(t.all)}</div>
     </div>
+    <div class="load">
+      <h3>Грузить на заводе</h3>
+      ${byWater().map(([w,q])=>`<div class="lr"><span>${w}</span><b>${q}</b></div>`).join('')}
+    </div>
     <div class="muted small" style="margin-bottom:10px">Пока не нажал «Я в рейсе» — список может меняться.</div>
     ${S.pts.map(cardPrep).join('')}`;
   b.innerHTML = `<button class="b-main" onclick="start()">Я в рейсе · ${t.q} бут.</button>`;
@@ -174,6 +190,7 @@ function renderRun(a,b){
         <div class="pill cash"><span class="muted tiny">наличными</span><b>${money(t.cash)}</b></div>
         <div class="pill card"><span class="muted tiny">переводом</span><b>${money(t.card)}</b></div>
       </div>
+      <div class="loadmini">Загружено: ${byWater().map(([w,q])=>w+' '+q).join(' · ')}</div>
     </div>
     <div class="muted small">Осталось точек: <b>${left}</b> из ${t.n}</div>
     ${Object.keys(byV).map(v=>`<div class="vill">${v}</div>`+byV[v].map(cardRun).join('')).join('')}`;
