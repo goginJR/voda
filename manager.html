@@ -55,6 +55,9 @@ label.lb{display:block;font-size:12px;color:#8da2c0;margin:10px 0 4px}
 .load .lr b{font-size:22px;font-weight:800}
 .vill{margin:14px 0 6px;font-size:12px;letter-spacing:.9px;text-transform:uppercase;color:#8da2c0;font-weight:700}
 .hr{height:1px;background:#1b2944;margin:14px 0}
+.quick{display:flex;gap:6px;flex-wrap:wrap}
+.quick button{background:#18243d;color:#cfe0f7;padding:9px 11px;font-size:13px;line-height:1.25}
+.quick button.on2{background:#2563eb;color:#fff}
 .warn{background:#3a3014;border:1px solid #6b5520;border-radius:12px;padding:10px;font-size:13px;color:#ffd479;margin-bottom:10px}
 </style>
 </head>
@@ -120,7 +123,8 @@ const SEED_ROUTE = [
 
 function fresh(){
   const S = {clients:[], orders:[], tara:[], money:[], routes:[], nextId:100, tab:'orders',
-             sel:[], open:null, paste:'', parsed:null};
+             sel:[], open:null, paste:'', parsed:null, find:'',
+             day:today(), newDay:today()};
   S.clients = SEED_CLIENTS.map(c=>({...c, tel:'', note:'', active:true}));
   const at = '2026-10-01';
   SEED_ROUTE.forEach((r,i)=>{
@@ -162,12 +166,29 @@ const lastOrder= id => { const l = S.orders.filter(o=>o.client===id && o.status=
                            .map(o=>o.done_at).sort(); return l.length ? l[l.length-1] : null; };
 const money = n => Math.round(n).toLocaleString('ru-RU')+' ₽';
 const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
-const today = () => new Date().toISOString().slice(0,10);
+function today(){ return new Date().toISOString().slice(0,10); }
 const ruDate = d => d ? d.split('-').reverse().join('.') : '—';
 const daysAgo = d => d ? Math.round((Date.now() - new Date(d+'T12:00:00')) / 86400000) : null;
 
-const pending = () => S.orders.filter(o=>o.status==='new');
-const planned = () => S.orders.filter(o=>o.status==='planned');
+/* ---------- даты ---------- */
+const addDays = (d, n) => { const x = new Date(d+'T12:00:00'); x.setDate(x.getDate()+n);
+                            return x.toISOString().slice(0,10); };
+const DOW = ['вс','пн','вт','ср','чт','пт','сб'];
+const dowOf = d => DOW[new Date(d+'T12:00:00').getDay()];
+const dayShort = d => d.slice(8,10)+'.'+d.slice(5,7);
+const dayLabel = d => d === today() ? 'сегодня'
+                    : d === addDays(today(),1) ? 'завтра'
+                    : dowOf(d)+' '+dayShort(d);
+const DAYS = () => Array.from({length:8}, (_,i)=>addDays(today(), i));
+
+/* ---------- заявки и рейсы по дням ---------- */
+const pending    = () => S.orders.filter(o=>o.status==='new');
+const pendingFor = d => pending().filter(o => (o.want || today()) === d);
+const routeFor   = d => S.routes.find(r => r.date === d && r.status !== 'done') || null;
+const plannedIn  = rid => S.orders.filter(o => o.status==='planned' && o.route===rid);
+const plannedFor = d => { const r = routeFor(d); return r ? plannedIn(r.id) : []; };
+// сколько бутылей ждёт на этот день: и в собранном рейсе, и в висящих заявках
+const dayLoad = d => [...plannedFor(d), ...pendingFor(d)].reduce((s,o)=>s+bottles(o), 0);
 
 /* ---------- досбор: кто на этих же улицах давно не заказывал ---------- */
 // дата последнего заказа: своя история важнее того, что пришло из справочника
@@ -191,7 +212,8 @@ function fillUp(pts){
 /* ---------- отрисовка ---------- */
 const TABS = [
   ['orders',  'Заявки',  () => pending().length + ' висит'],
-  ['route',   'Рейс',    () => planned().length ? planned().length+' точек' : 'не собран'],
+  ['route',   'Рейсы',   () => { const n = S.routes.filter(r=>r.status==='draft'||r.status==='frozen').length;
+                                 return n ? n+(n===1?' собран':' собрано') : 'не собраны'; }],
   ['clients', 'Клиенты', () => S.clients.filter(c=>c.active).length + ' всего']
 ];
 function render(){
@@ -225,31 +247,50 @@ function viewOrders(a, b){
       <input class="q" id="mq" type="number" inputmode="numeric" min="1" value="2">
       <button class="b-ok b-sm" onclick="addManual()">Добавить</button>
     </div>
+    <label class="lb">На какой день</label>
+    <div class="quick">${DAYS().slice(0,5).map(d=>
+      `<button class="${S.newDay===d?'on2':''}" onclick="S.newDay='${d}';render()">${dayLabel(d)}</button>`).join('')}</div>
   </div>
 
   <h2>Висящие заявки${p.length?' · '+p.length:''}</h2>
-  ${p.length ? p.map(cardOrder).join('')
-             : `<div class="card muted small">Пусто. Заявки появятся здесь, пока рейс не собран.</div>`}`;
+  ${p.length ? byDay(p) : `<div class="card muted small">Пусто. Новые заявки появятся здесь.</div>`}`;
 
-  if(p.length) b.innerHTML = `<button class="b-main" onclick="toRoute()">В рейс · ${p.length} точек, ${p.reduce((s,o)=>s+bottles(o),0)} бут.</button>`;
+  const d = S.newDay || today();
+  const pd = pendingFor(d);
+  if(pd.length) b.innerHTML = `<button class="b-main" onclick="toRoute('${d}')">Собрать рейс на ${dayLabel(d)} · ${pd.length} точек, ${pd.reduce((s,o)=>s+bottles(o),0)} бут.</button>`;
+  else if(p.length) b.innerHTML = `<div class="muted small" style="text-align:center">На ${dayLabel(d)} заявок нет. Выбери другой день кнопками выше.</div>`;
   const ta = document.getElementById('pa');
   if(ta) ta.oninput = e => { S.paste = e.target.value; };
 }
+// заявки сгруппированы по дню, на который их ждут
+function byDay(list){
+  const g = {};
+  list.forEach(o => { const d = o.want || today(); (g[d] = g[d] || []).push(o); });
+  return Object.keys(g).sort().map(d => {
+    const q = g[d].reduce((s,o)=>s+bottles(o),0);
+    return `<div class="vill">${dayLabel(d)} · ${g[d].length} адр., ${q} бут.</div>` + g[d].map(cardOrder).join('');
+  }).join('');
+}
 const cardOrder = o => { const c = cli(o.client), td = taraDebt(o.client), md = moneyDebt(o.client);
+  const d = o.want || today();
   return `<div class="card"><div class="rowx">
     <div class="f"><div class="addr">${esc(c.addr)}
       ${td>0?`<span class="chip tara">тара ${td}</span>`:''}${md>0?`<span class="chip debt">долг ${money(md)}</span>`:''}</div>
       <div class="muted tiny">${esc(c.vill)}${c.name?' · '+esc(c.name):''} · ${o.items.map(i=>i.w+' '+i.q).join(' + ')}${o.note?' · '+esc(o.note):''}</div></div>
     <div class="amt">${money(orderSum(o))}</div>
     <button class="b-red b-sm" onclick="dropOrder(${o.id})">✕</button>
-  </div></div>`; };
+  </div>
+  <div class="quick" style="margin-top:8px">${DAYS().slice(0,5).map(x=>
+    `<button class="${x===d?'on2':''}" onclick="setWant(${o.id},'${x}')">${dayLabel(x)}</button>`).join('')}</div>
+  </div>`; };
+function setWant(id, d){ const o = S.orders.find(x=>x.id===id); if(o){ o.want = d; render(); } }
 
 function addManual(){
   const id = Number(document.getElementById('mc').value);
   const w  = document.getElementById('mw').value;
   const q  = Math.max(1, parseInt(document.getElementById('mq').value) || 1);
   S.orders.push({id:nid(), client:id, items:[{w, q, p:PRICE[w]}], pay:'transfer',
-                 status:'new', extra:0, back:null, note:''});
+                 status:'new', want:S.newDay||today(), extra:0, back:null, note:''});
   render();
 }
 function dropOrder(id){ S.orders = S.orders.filter(o=>o.id!==id); render(); }
@@ -314,22 +355,41 @@ function setParsedClient(i, v){ S.parsed[i].client = v ? Number(v) : null;
   S.parsed[i].ok = !!v && S.parsed[i].items.every(x=>x.q>0); render(); }
 function commitParsed(){
   S.parsed.filter(p=>p.ok).forEach(p=>S.orders.push({id:nid(), client:p.client,
-    items:p.items.filter(x=>x.q>0), pay:'transfer', status:'new', extra:0, back:null, note:''}));
+    items:p.items.filter(x=>x.q>0), pay:'transfer', status:'new',
+    want:S.newDay||today(), extra:0, back:null, note:''}));
   S.parsed = null; S.paste = ''; render();
 }
 
 /* ====================== РЕЙС ====================== */
-function toRoute(){
-  const rid = (S.routes.reduce((m,r)=>Math.max(m,r.id),0) || 0) + 1;
-  S.routes.push({id:rid, date:today(), status:'draft'});
-  pending().forEach((o,i)=>{ o.status='planned'; o.route=rid; o.seq=i+1; });
-  S.tab = 'route'; render();
+function toRoute(date){
+  const d = date || S.day || today();
+  let r = routeFor(d);
+  if(!r){
+    const rid = (S.routes.reduce((m,x)=>Math.max(m,x.id),0) || 0) + 1;
+    r = {id:rid, date:d, status:'draft'};
+    S.routes.push(r);
+  }
+  const base = plannedIn(r.id).length;
+  pendingFor(d).forEach((o,i)=>{ o.status='planned'; o.route=r.id; o.seq=base+i+1; });
+  S.tab = 'route'; S.day = d; render();
 }
 function viewRoute(a, b){
-  const pts = planned();
+  const d = S.day || today();
+  const r = routeFor(d);
+  const pts = r ? plannedIn(r.id) : [];
+  const strip = `<div class="quick" style="margin-bottom:12px">${DAYS().map(x=>{
+      const n = dayLoad(x), rr = routeFor(x);
+      return `<button class="${x===d?'on2':''}" onclick="S.day='${x}';render()">${dayLabel(x)}${
+        n?`<br><span style="font-size:11px;opacity:.8">${n} бут.${rr?' ✓':''}</span>`:''}</button>`;
+    }).join('')}</div>`;
+
   if(!pts.length){
-    a.innerHTML = `<div class="card muted small">Рейс не собран. Набери заявки на вкладке «Заявки» и нажми «В рейс».</div>
-    ${routeHistory()}`;
+    const pd = pendingFor(d);
+    a.innerHTML = strip + (pd.length
+      ? `<div class="card"><div class="small">На ${dayLabel(d)} висит ${pd.length} заявок, ${pd.reduce((s,o)=>s+bottles(o),0)} бут. Рейс ещё не собран.</div>
+         <button class="b-ok" style="width:100%;margin-top:10px" onclick="toRoute('${d}')">Собрать рейс на ${dayLabel(d)}</button></div>`
+      : `<div class="card muted small">На ${dayLabel(d)} ничего нет. Заявки добавляются на вкладке «Заявки», там же выбирается день.</div>`)
+      + routeHistory();
     return;
   }
   const byW = {}; pts.forEach(o=>o.items.forEach(i=>byW[i.w]=(byW[i.w]||0)+i.q));
@@ -339,7 +399,8 @@ function viewRoute(a, b){
   const buy = Object.entries(byW).reduce((s,[w,n])=>s+n*(BUY[w]||0),0);
   const byV = {}; pts.forEach(o=>{ const v = cli(o.client).vill; (byV[v]=byV[v]||[]).push(o); });
 
-  a.innerHTML = `
+  a.innerHTML = strip + `
+  <h1>Рейс на ${dayLabel(d)} · ${ruDate(d)}${r.status==='frozen'?' <span class="chip">водитель в рейсе</span>':''}</h1>
   <div class="load"><h2 style="margin:0 0 8px">Грузить на заводе</h2>
     ${Object.entries(byW).sort((x,y)=>y[1]-x[1]).map(([w,n])=>
       `<div class="lr"><span>${esc(w)}</span><b>${n+SPARE}</b></div>
@@ -358,9 +419,9 @@ function viewRoute(a, b){
   ${Object.keys(byV).map(v=>`<div class="vill">${esc(v)}</div>`+byV[v].map(cardPt).join('')).join('')}
   ${fillUpBlock(pts, q)}
   <div class="hr"></div>
-  <button class="b-ghost" style="width:100%" onclick="unRoute()">Разобрать рейс обратно в заявки</button>
+  <button class="b-ghost" style="width:100%" onclick="unRoute('${d}')">Разобрать рейс обратно в заявки</button>
   ${routeHistory()}`;
-  b.innerHTML = `<button class="b-main" onclick="handOff()">Передать водителю</button>`;
+  b.innerHTML = `<button class="b-main" onclick="handOff('${d}')">Передать водителю · ${dayLabel(d)}</button>`;
 }
 const cardPt = o => { const c = cli(o.client), f = floorOf(c);
   return `<div class="card"><div class="rowx">
@@ -404,19 +465,28 @@ function remind(id){
 }
 function addFromClient(id){
   const c = cli(id), q = Math.max(1, Number(c.usual) || 1);
-  const rid = (S.routes.find(r=>r.status==='draft') || {}).id;
+  const d = S.day || today();
+  const r = routeFor(d);
   const o = {id:nid(), client:id, items:[{w:'Идель', q, p:PRICE['Идель']}], pay:c.pay==='cash'?'cash':'transfer',
-             status: rid ? 'planned' : 'new', route: rid || null, seq: planned().length+1,
+             status: r ? 'planned' : 'new', route: r ? r.id : null,
+             want: d, seq: (r ? plannedIn(r.id).length : 0) + 1,
              extra:0, back:null, note:'добрали'};
   S.orders.push(o); render();
 }
 
-function unRoute(){ planned().forEach(o=>{o.status='new'; o.route=null;});
-  S.routes = S.routes.filter(r=>r.status!=='draft'); S.tab='orders'; render(); }
-function handOff(){
-  const pts = planned();
+function unRoute(date){
+  const d = date || S.day || today(), r = routeFor(d);
+  if(!r) return;
+  plannedIn(r.id).forEach(o=>{ o.status='new'; o.route=null; o.want = d; });
+  S.routes = S.routes.filter(x=>x.id !== r.id);
+  S.tab='orders'; S.newDay = d; render();
+}
+function handOff(date){
+  const d = date || S.day || today(), r = routeFor(d);
+  const pts = r ? plannedIn(r.id) : [];
+  if(!pts.length) return;
   const byW = {}; pts.forEach(o=>o.items.forEach(i=>byW[i.w]=(byW[i.w]||0)+i.q));
-  const txt = `Рейс на ${ruDate(today())}\nГрузить: ${Object.entries(byW).map(([w,n])=>w+' '+(n+SPARE)).join(', ')}\n\n`
+  const txt = `Рейс на ${ruDate(d)}\nГрузить: ${Object.entries(byW).map(([w,n])=>w+' '+(n+SPARE)).join(', ')}\n\n`
     + pts.map((o,i)=>{ const c=cli(o.client), f=floorOf(c);
         return `${i+1}. ${c.vill} · ${c.addr} — ${o.items.map(x=>x.w+' '+x.q).join(' + ')} — ${money(orderSum(o))}`
           + (f?` (${f} этаж)`:'') + (c.apt&&c.apt.code?`, домофон ${c.apt.code}`:'')
