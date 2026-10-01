@@ -77,23 +77,27 @@ textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px sol
 
 <script>
 const PAY_PER_BOTTLE = 80;          // фикса водителю, ₽ за бутыль
-const KEY = 'reis-2026-10-01-v3';
+const KEY = 'reis-2026-10-01-v4';
 
 // Заявки на 01.10.2026 — разобраны из группы «ЗАЯВКИ»
 const SEED = [
-  {id:1,  vill:'ОпаЕльня',   addr:'ЧПУ «Комплекс»',      name:'',                       tel:'',             pay:'card', items:[{w:'Идель',q:10,p:200}], tara:'', note:'висит с 29.09'},
-  {id:2,  vill:'ОпаЕльня',   addr:'Светлая 280',         name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:4,p:200}],  tara:'', note:'висит с 28.09'},
-  {id:3,  vill:'ОпаЕльня',   addr:'Светлая 94',          name:'Татьяна Николаевна',     tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
+  {id:1,  vill:'ОпаЕльня',   addr:'Ближняя 27',          name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:5,p:200}],  tara:'', note:'с 30.09'},
+  {id:2,  vill:'ОпаЕльня',   addr:'Радужная 15',         name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:3,p:200}],  tara:'', note:''},
+  {id:3,  vill:'ОпаЕльня',   addr:'Радужная 21',         name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:3,p:200}],  tara:'', note:'заявка 12:37'},
   {id:4,  vill:'ОпаЕльня',   addr:'Садовая 1',           name:'Ибрагимова Татьяна Александровна', tel:'89202920020', pay:'card', items:[{w:'Идель',q:4,p:200}], tara:'есть', note:''},
-  {id:5,  vill:'ОпаЕльня',   addr:'Ближняя 27',          name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:5,p:200}],  tara:'', note:'с 30.09'},
-  {id:6,  vill:'ОпаЕльня',   addr:'Радужная 15',         name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:3,p:200}],  tara:'', note:''},
-  {id:7,  vill:'ОпаЕльня',   addr:'Радужная 21',         name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:3,p:200}],  tara:'', note:'заявка 12:37'},
-  {id:8,  vill:'сп Культура',addr:'Молодёжная 1, кв. 30',name:'Кабанова Нина Васильевна', tel:'89524496923', pay:'card', items:[{w:'Идель',q:2,p:200}], tara:'есть', note:'4 этаж, домофон 32705'},
-  {id:9,  vill:'сп Культура',addr:'Изумрудная 20к2',     name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
-  {id:10, vill:'Крутая',     addr:'Ясная 19',            name:'Одинцова Ольга',         tel:'+79202941877', pay:'card', items:[{w:'Идель',q:1,p:200},{w:'Дивеево',q:1,p:250}], tara:'есть', note:''},
-  {id:11, vill:'Крутая',     addr:'Калиновая 27',        name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}],  tara:'', note:''},
-  {id:12, vill:'Ждановский', addr:'Кленовая 5/2',        name:'Коломенцев Антон Владимирович', tel:'+79503616463', pay:'card', items:[{w:'Идель',q:4,p:200}], tara:'есть', note:''}
+  {id:5,  vill:'ОпаЕльня',   addr:'Светлая 280',         name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:4,p:200}],  tara:'', note:'висит с 28.09'},
+  {id:6,  vill:'ОпаЕльня',   addr:'Светлая 94',          name:'Татьяна Николаевна',     tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
+  {id:7,  vill:'сп Культура',addr:'Молодёжная 1, кв. 30',name:'Кабанова Нина Васильевна', tel:'89524496923', pay:'card', items:[{w:'Идель',q:2,p:200}], tara:'есть', note:'4 этаж, домофон 32705'},
+  {id:8,  vill:'сп Культура',addr:'Изумрудная 20к2',     name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}],  tara:'', note:'с 30.09'},
+  {id:9,  vill:'Крутая',     addr:'Ясная 19',            name:'Одинцова Ольга',         tel:'+79202941877', pay:'card', items:[{w:'Идель',q:1,p:200},{w:'Дивеево',q:1,p:250}], tara:'есть', note:''},
+  {id:10, vill:'Крутая',     addr:'Калиновая 27',        name:'',                       tel:'',             pay:'cash', items:[{w:'Идель',q:2,p:200}],  tara:'', note:''},
+  {id:11, vill:'Ждановский', addr:'Кленовая 5/2',        name:'Коломенцев Антон Владимирович', tel:'+79503616463', pay:'card', items:[{w:'Идель',q:4,p:200}], tara:'есть', note:''},
+  {id:12, vill:'Кстово',     addr:'Ступишина 2А к 6',    name:'ЧПУ «Комплекс»',         tel:'',             pay:'card', items:[{w:'Идель',q:10,p:200}], tara:'', note:'новый адрес, висит с 29.09'}
 ];
+
+// Порядок объезда улиц внутри района (Дима, 01.10). Чего нет в списке — в конец.
+const STREETS = ['Ближняя','Радужная','Весенняя','Дальняя','Садовая','Светлая'];
+const streetRank = a => { const i = STREETS.findIndex(x => a.startsWith(x)); return i < 0 ? 99 : i; };
 
 let S = load();
 function load(){
@@ -149,6 +153,7 @@ function renderRun(a,b){
   const t = totals(), left = S.pts.filter(p=>!p.done).length;
   const byV = {};
   S.pts.forEach(p=>{ (byV[p.vill] = byV[p.vill]||[]).push(p); });
+  Object.values(byV).forEach(l => l.sort((a,b) => streetRank(a.addr) - streetRank(b.addr)));
   a.innerHTML = `<h1>Рейс · ${t.q} бут.</h1>
     <div class="sum">
       <div class="muted small">Всего по рейсу</div>
