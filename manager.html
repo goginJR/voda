@@ -61,6 +61,7 @@ label.lb{display:block;font-size:12px;color:#8da2c0;margin:10px 0 4px}
 <body>
 <div class="wrap"><div class="tabs" id="tabs"></div><div id="app"></div></div>
 <div class="bar"><div class="wrap" id="bar"></div></div>
+<input type="file" id="imp" accept=".json,.txt,application/json,text/plain" style="display:none">
 
 <script>
 /* ============================================================
@@ -75,6 +76,7 @@ const PRICE   = {'Идель':200, 'Дивеево':250};
 const BUY     = {'Идель':45,  'Дивеево':68};
 const DEPOSIT = 300;               // залог за бутыль
 const FLOOR_RATE = 20, DRIVER_FLOOR_RATE = 15, PAY_PER_BOTTLE = 80, SPARE = 3;
+const CARS = [['Поло',38], ['Кашкай',55], ['Соллерс',120]];   // вместимость, бутылей
 
 /* ---------- стартовые данные: клиенты и фактический рейс 01.10 ----------
    Телефоны сюда не вписаны сознательно: файл лежит на публичном хостинге.
@@ -166,6 +168,25 @@ const daysAgo = d => d ? Math.round((Date.now() - new Date(d+'T12:00:00')) / 864
 
 const pending = () => S.orders.filter(o=>o.status==='new');
 const planned = () => S.orders.filter(o=>o.status==='planned');
+
+/* ---------- досбор: кто на этих же улицах давно не заказывал ---------- */
+// дата последнего заказа: своя история важнее того, что пришло из справочника
+const lastDate   = c => lastOrder(c.id) || c.last || '';
+const streetOf   = a => String(a||'').replace(/\s*\d.*$/, '').trim().toLowerCase().replace(/ё/g,'е');
+// просрочка = дней с последнего заказа минус его обычный ритм
+const overdueOf  = c => { const d = daysAgo(lastDate(c)), r = Number(c.rhythm)||0;
+                          return (d===null || !r) ? null : d - r; };
+function fillUp(pts){
+  const inRoute  = new Set(pts.map(o=>o.client));
+  const villages = new Set(pts.map(o=>cli(o.client).vill));
+  const streets  = new Set(pts.map(o=>streetOf(cli(o.client).addr)));
+  return S.clients
+    .filter(c => c.active && !inRoute.has(c.id) && villages.has(c.vill) && (Number(c.usual)||0) > 0)
+    .map(c => ({c, od: overdueOf(c), same: streets.has(streetOf(c.addr))}))
+    .filter(x => x.od === null || x.od >= 0)          // либо срок подошёл, либо ритм неизвестен
+    .sort((a,b) => (b.same - a.same) || ((b.od ?? -1) - (a.od ?? -1)))
+    .slice(0, 12);
+}
 
 /* ---------- отрисовка ---------- */
 const TABS = [
@@ -335,6 +356,7 @@ function viewRoute(a, b){
   ${q < 20 ? `<div class="warn">Бутылей меньше 20. По твоему же правилу такой рейс машину не отбивает.</div>` : ''}
   ${q > 55 ? `<div class="warn">Больше 55 бутылей — брать грузовой, а не два рейса.</div>` : ''}
   ${Object.keys(byV).map(v=>`<div class="vill">${esc(v)}</div>`+byV[v].map(cardPt).join('')).join('')}
+  ${fillUpBlock(pts, q)}
   <div class="hr"></div>
   <button class="b-ghost" style="width:100%" onclick="unRoute()">Разобрать рейс обратно в заявки</button>
   ${routeHistory()}`;
@@ -345,6 +367,50 @@ const cardPt = o => { const c = cli(o.client), f = floorOf(c);
     <div class="f"><div class="addr">${esc(c.addr)}</div>
       <div class="muted tiny">${o.items.map(i=>i.w+' '+i.q).join(' + ')}${f?` · ${f} этаж, занос ${money(f*FLOOR_RATE*bottles(o))}`:''}</div></div>
     <div class="amt">${money(orderSum(o))}</div></div></div>`; };
+/* ---------- «Можно добрать» ---------- */
+function fillUpBlock(pts, q){
+  const list = fillUp(pts);
+  const car  = CARS.find(([,n]) => q <= n) || CARS[CARS.length-1];
+  const free = car[1] - q;
+  if(!list.length) return `<div class="hr"></div><div class="muted small">Добирать некого: на этих улицах у всех срок ещё не подошёл.</div>`;
+  return `<div class="hr"></div>
+  <h2>Можно добрать</h2>
+  <div class="muted small" style="margin:-4px 0 10px">
+    В рейсе ${q} бут. Под ${esc(car[0])} (${car[1]}) остаётся ${free} мест.
+    Ниже те, кто живёт на тех же улицах и у кого срок уже прошёл.</div>
+  ${list.map(({c, od, same}) => {
+    const d = daysAgo(lastDate(c));
+    return `<div class="card"><div class="rowx">
+      <div class="f"><div class="addr">${esc(c.addr)}
+        ${same?`<span class="chip">та же улица</span>`:''}
+        ${od!==null && od>0?`<span class="chip debt">+${od} дн</span>`:''}</div>
+        <div class="muted tiny">${esc(c.vill)}${c.name?' · '+esc(c.name):''} · обычно ${c.usual} бут.${
+          d!==null?` · был ${d} дн. назад`:' · заказов не было'}${c.rhythm?`, раз в ${c.rhythm} дн.`:''}</div></div>
+      <button class="b-ghost b-sm" onclick="remind(${c.id})">Напомнить</button>
+      <button class="b-ok b-sm" onclick="addFromClient(${c.id})">+${c.usual}</button>
+    </div></div>`;
+  }).join('')}`;
+}
+function remind(id){
+  const c = cli(id), d = daysAgo(lastDate(c));
+  const txt = `${c.name ? c.name + ', здравствуйте' : 'Здравствуйте'}! Мы завтра едем по ${c.vill}`
+    + `${d!==null ? `, а у вас с прошлого раза уже ${d} дней прошло` : ''}. `
+    + `Вода, наверное, кончается — привезти ${c.usual || ''} ${c.usual ? 'бутылей' : ''}?`.replace(/\s+/g,' ');
+  if(c.tel){
+    const wa = 'https://wa.me/' + c.tel.replace(/\D/g,'') + '?text=' + encodeURIComponent(txt);
+    if(confirm(txt + '\n\nОК — открыть WhatsApp, Отмена — просто скопировать')){ window.open(wa, '_blank'); return; }
+  }
+  copy(txt, 'Напоминание скопировано');
+}
+function addFromClient(id){
+  const c = cli(id), q = Math.max(1, Number(c.usual) || 1);
+  const rid = (S.routes.find(r=>r.status==='draft') || {}).id;
+  const o = {id:nid(), client:id, items:[{w:'Идель', q, p:PRICE['Идель']}], pay:c.pay==='cash'?'cash':'transfer',
+             status: rid ? 'planned' : 'new', route: rid || null, seq: planned().length+1,
+             extra:0, back:null, note:'добрали'};
+  S.orders.push(o); render();
+}
+
 function unRoute(){ planned().forEach(o=>{o.status='new'; o.route=null;});
   S.routes = S.routes.filter(r=>r.status!=='draft'); S.tab='orders'; render(); }
 function handOff(){
@@ -375,17 +441,28 @@ function routeHistory(){
 /* ====================== КЛИЕНТЫ ====================== */
 function viewClients(a, b){
   if(S.open) return viewClient(a, b, S.open);
-  const list = S.clients.filter(c=>c.active);
+  const all = S.clients.filter(c=>c.active);
+  const f = norm(S.find || '');
+  const list = f ? all.filter(c => norm(c.addr+c.name+c.vill).includes(f)) : all;
   const byV = {}; list.forEach(c=>(byV[c.vill]=byV[c.vill]||[]).push(c));
-  const tDebt = list.reduce((s,c)=>s+Math.max(0,taraDebt(c.id)), 0);
-  const mDebt = list.reduce((s,c)=>s+Math.max(0,moneyDebt(c.id)), 0);
+  const tDebt = all.reduce((s,c)=>s+Math.max(0,taraDebt(c.id)), 0);   // тара у должников
+  const tOver = all.reduce((s,c)=>s+Math.max(0,-taraDebt(c.id)), 0);  // вернули лишнего
+  const mDebt = all.reduce((s,c)=>s+Math.max(0,moneyDebt(c.id)), 0);
   a.innerHTML = `
   <div class="card">
-    <div class="kv"><span class="muted">Клиентов</span><span><b>${list.length}</b></span></div>
-    <div class="kv"><span class="muted">Тары у клиентов</span><span class="y"><b>${tDebt}</b> бут. · ${money(tDebt*DEPOSIT)} залога</span></div>
+    <div class="kv"><span class="muted">Клиентов</span><span><b>${all.length}</b></span></div>
+    <div class="kv"><span class="muted">Тары за должниками</span><span class="y"><b>${tDebt}</b> бут. · ${money(tDebt*DEPOSIT)} залога</span></div>
+    ${tOver?`<div class="kv"><span class="muted">Вернули лишнего</span><span class="g">${tOver} бут.</span></div>
+    <div class="kv"><span class="muted">Чистая недостача</span><span class="y"><b>${tDebt-tOver}</b> бут.</span></div>`:''}
     <div class="kv"><span class="muted">Денег за клиентами</span><span class="${mDebt?'r':'g'}"><b>${money(mDebt)}</b></span></div>
+    <div class="frow" style="margin-top:10px">
+      <button class="b-ghost b-sm" style="flex:1" onclick="document.getElementById('imp').click()">Загрузить справочник</button>
+      <button class="b-ghost b-sm" style="flex:1" onclick="doExport()">Выгрузить копию</button>
+    </div>
   </div>
-  ${Object.keys(byV).map(v=>`<div class="vill">${esc(v)}</div>`+byV[v].map(cardCl).join('')).join('')}
+  <input id="fi" placeholder="поиск по адресу или имени" value="${esc(S.find||'')}">
+  ${f?`<div class="muted small" style="margin-top:6px">Нашёл ${list.length} из ${all.length}</div>`:''}
+  ${Object.keys(byV).map(v=>`<div class="vill">${esc(v)} · ${byV[v].length}</div>`+byV[v].map(cardCl).join('')).join('')}
   <h2>Новый клиент</h2>
   <div class="card">
     <div class="frow">
@@ -395,6 +472,69 @@ function viewClients(a, b){
     <div class="frow"><input id="nn" placeholder="имя, необязательно">
       <button class="b-ok b-sm" onclick="addClient()">Создать</button></div>
   </div>`;
+  const fi = document.getElementById('fi');
+  if(fi){
+    fi.oninput = e => { S.find = e.target.value; render();
+      const n = document.getElementById('fi');
+      if(n){ n.focus(); n.setSelectionRange(n.value.length, n.value.length); } };
+  }
+}
+
+/* ---------- справочник: загрузка и копия ---------- */
+function doExport(){
+  const doc = {v:1, exported:today(), clients:S.clients,
+               tara:S.tara, money:S.money, orders:S.orders, routes:S.routes};
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(doc)], {type:'application/json'}));
+  a.download = 'voda-' + today() + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+// Слияние по адресу: своя история тары и денег не теряется, обновляются только
+// данные клиента. Новые адреса добавляются.
+function mergeClients(incoming){
+  let upd = 0, add = 0;
+  const idx = new Map(S.clients.map(c => [norm(c.vill + c.addr), c]));
+  const byAddr = new Map(S.clients.map(c => [norm(c.addr), c]));
+  for(const n of incoming){
+    if(!n || !n.addr) continue;
+    const hit = idx.get(norm((n.vill||'') + n.addr)) || byAddr.get(norm(n.addr));
+    if(hit){
+      Object.assign(hit, {
+        name: n.name || hit.name, tel: n.tel || hit.tel, tel2: n.tel2 || hit.tel2 || '',
+        usual: Number(n.usual) || hit.usual || 0, rhythm: Number(n.rhythm) || hit.rhythm || 0,
+        last: n.last || hit.last || '', status: n.status || hit.status || '',
+        pay: n.pay || hit.pay || 'transfer', opt: !!n.opt,
+        note: n.note || hit.note || '', tare_notes: n.tare_notes || hit.tare_notes || '',
+        vill: hit.vill || n.vill
+      });
+      upd++;
+    } else {
+      S.clients.push({...n, id: nid(), active: n.active !== false});
+      add++;
+    }
+  }
+  return {upd, add};
+}
+function doImport(file){
+  const r = new FileReader();
+  r.onload = () => {
+    let doc;
+    try { doc = JSON.parse(r.result); }
+    catch(e){ return alert('Это не похоже на файл справочника: ' + e.message); }
+    const list = Array.isArray(doc) ? doc : doc.clients;
+    if(!Array.isArray(list)) return alert('В файле нет списка клиентов');
+    const {upd, add} = mergeClients(list);
+    // если в файле лежит и история (наша же копия) — восстанавливаем её целиком
+    if(doc.tara && doc.money && confirm('В файле есть история тары и денег. Заменить текущую?')){
+      S.tara = doc.tara; S.money = doc.money;
+      if(doc.orders) S.orders = doc.orders;
+      if(doc.routes) S.routes = doc.routes;
+    }
+    render();
+    alert(`Готово. Обновлено ${upd}, добавлено ${add}. Всего в справочнике ${S.clients.length}.`);
+  };
+  r.onerror = () => alert('Не смог прочитать файл');
+  r.readAsText(file, 'utf-8');
 }
 const cardCl = c => { const td = taraDebt(c.id), md = moneyDebt(c.id), d = daysAgo(lastOrder(c.id));
   return `<div class="card" onclick="openCl(${c.id})"><div class="rowx">
@@ -423,6 +563,14 @@ function viewClient(a, b, id){
     ${c.name?`<div class="kv"><span class="muted">Клиент</span><span>${esc(c.name)}</span></div>`:''}
     <div class="kv"><span class="muted">Телефон</span><span>${c.tel?esc(c.tel):'<span class="muted">не внесён</span>'}
       <button class="b-ghost b-sm" style="margin-left:6px" onclick="setTel(${id})">${c.tel?'изменить':'внести'}</button></span></div>
+    ${c.tel2?`<div class="kv"><span class="muted">Второй номер</span><span>${esc(c.tel2)}</span></div>`:''}
+  </div>
+  ${c.tel?`<div class="frow">
+    <a class="b-ok" style="flex:1;text-align:center;text-decoration:none;color:#fff;padding:14px;border-radius:12px;font-weight:700" href="tel:${esc(c.tel)}">Позвонить</a>
+    <a class="b-ghost" style="flex:1;text-align:center;text-decoration:none;color:#cfe0f7;padding:14px;border-radius:12px;font-weight:700" href="https://wa.me/${esc(c.tel.replace(/\D/g,''))}" target="_blank" rel="noopener">WhatsApp</a>
+    <a class="b-ghost" style="flex:1;text-align:center;text-decoration:none;color:#cfe0f7;padding:14px;border-radius:12px;font-weight:700" href="sms:${esc(c.tel)}">СМС</a>
+  </div>`:''}
+  <div class="card">
     <div class="kv"><span class="muted">Обычно берёт</span><span>${c.usual||'?'} бут., раз в ${c.rhythm||'?'} дн.</span></div>
     ${c.apt?`<div class="kv"><span class="muted">Квартира</span><span>кв. ${esc(c.apt.flat||'')}, ${c.apt.floor} этаж${c.apt.code?', домофон '+esc(c.apt.code):''}${c.apt.acc?', '+esc(c.apt.acc):''}</span></div>`:''}
     <div class="kv"><span class="muted">Последний заказ</span><span>${ruDate(lastOrder(id))}</span></div>
@@ -492,6 +640,11 @@ function copy(txt, msg){
   document.body.removeChild(t);
 }
 
+document.getElementById('imp').onchange = e => {
+  const f = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(f) doImport(f);
+};
 render();
 </script>
 </body>
