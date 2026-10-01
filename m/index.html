@@ -172,6 +172,12 @@ const esc = s => String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function today(){ return new Date().toISOString().slice(0,10); }
 const ruDate = d => d ? d.split('-').reverse().join('.') : '—';
 const daysAgo = d => d ? Math.round((Date.now() - new Date(d+'T12:00:00')) / 86400000) : null;
+// «был 95 дн. назад» читается хуже, чем «не заказывал 3 мес.»: в днях видно
+// только свежее, а отвал — месяцами.
+const agoText = d => d === null ? 'заказов не было'
+  : d <= 0  ? 'был сегодня'
+  : d < 45  ? `был ${d} дн. назад`
+  : `не заказывал ${Math.round(d/30)} мес.`;
 
 /* ---------- даты ---------- */
 const addDays = (d, n) => { const x = new Date(d+'T12:00:00'); x.setDate(x.getDate()+n);
@@ -529,8 +535,11 @@ function viewClients(a, b){
     <div class="kv"><span class="muted">Чистая недостача</span><span class="y"><b>${tDebt-tOver}</b> бут.</span></div>`:''}
     <div class="kv"><span class="muted">Денег за клиентами</span><span class="${mDebt?'r':'g'}"><b>${money(mDebt)}</b></span></div>
     <div class="frow" style="margin-top:10px">
-      <button class="b-ghost b-sm" style="flex:1" onclick="document.getElementById('imp').click()">Загрузить справочник</button>
+      <button class="b-ok b-sm" style="flex:1" onclick="pullClients()">Обновить справочник</button>
       <button class="b-ghost b-sm" style="flex:1" onclick="doExport()">Выгрузить копию</button>
+    </div>
+    <div class="frow" style="margin-top:6px">
+      <button class="b-ghost b-sm" style="flex:1" onclick="document.getElementById('imp').click()">Загрузить из файла</button>
     </div>
   </div>
   <input id="fi" placeholder="поиск по адресу или имени" value="${esc(S.find||'')}">
@@ -539,7 +548,7 @@ function viewClients(a, b){
   <h2>Новый клиент</h2>
   <div class="card">
     <div class="frow">
-      <select id="nv">${['ОпаЕльня','сп Культура','Крутая','Ждановский','Кстово'].map(v=>`<option>${v}</option>`).join('')}</select>
+      <select id="nv">${villList().map(v=>`<option>${esc(v)}</option>`).join('')}</select>
       <input id="na" placeholder="улица и дом">
     </div>
     <div class="frow"><input id="nn" placeholder="имя, необязательно">
@@ -553,6 +562,16 @@ function viewClients(a, b){
   }
 }
 
+/* ---------- районы ---------- */
+// Список для «нового клиента» собираем из самого справочника, иначе он отстаёт
+// от жизни при каждой пересборке районов.
+const VILL_BASE = ['ОпаЕльня','Крутая','Ждановский','ТИЗ Надежда','Большая Ельня',
+                   'Культура','Опытный','Карповка','ЖК Времена года','Кстово','Город'];
+function villList(){
+  const seen = new Set(S.clients.map(c=>c.vill).filter(Boolean));
+  return [...VILL_BASE.filter(v=>true), ...[...seen].filter(v=>!VILL_BASE.includes(v)).sort()];
+}
+
 /* ---------- справочник: загрузка и копия ---------- */
 function doExport(){
   const doc = {v:1, exported:today(), clients:S.clients,
@@ -564,21 +583,50 @@ function doExport(){
 }
 // Слияние по адресу: своя история тары и денег не теряется, обновляются только
 // данные клиента. Новые адреса добавляются.
+// Ключ «улица + дом» без названия деревни. Старые записи носили населённый пункт
+// прямо в адресе («Д. Крутая Солнечная 32»), новые держат его в районе, поэтому
+// по голому адресу они не сходятся и клиент задваивается.
+// \w в JS не знает кириллицы, поэтому хвосты слов пишем явным классом.
+const PLACE  = /(заезд\s+через\s+дер[а-яё]*|жк\s+времена\s+года|времена\s+года|мал[а-яё]*\.?\s*ельня|м\.?\s*ельня|больш[а-яё]*\s+ельня|б\.?\s*ельня|крутая|черемисское|опалиха|опаельня|ждановск[а-яё]*|тиз\s+надежда|сп\.?\s*культура|культура|опытный|новая\s+жизнь|нижний\s+новгород|кстово)/gi;
+// «д», «ул», «кв» рубим только как отдельные слова, иначе «Домой» станет «омой».
+// \b на кириллице не работает — границы задаём разделителями явно.
+const NOISE  = /(^|[\s.,()\/-])(д|п|г|ул|дом|кв|пос|дер|деревня|нн|без\s+корпуса)(?=[\s.,()\/-]|$)/gi;
+const addrKey = a => {
+  let s = String(a||'').replace(PLACE, ' ');
+  for(let i = 0; i < 3; i++) s = s.replace(NOISE, '$1 ');
+  return norm(s);
+};
+const telKey  = t => String(t||'').replace(/\D/g,'').slice(-10);
+
+// Слияние: своя история тары и денег не теряется, данные клиента обновляются.
+// Район и адрес берём из файла — ради этого справочник и перезагружают.
 function mergeClients(incoming){
-  let upd = 0, add = 0;
-  const idx = new Map(S.clients.map(c => [norm(c.vill + c.addr), c]));
-  const byAddr = new Map(S.clients.map(c => [norm(c.addr), c]));
+  let upd = 0, add = 0, renamed = 0;
+  const byFull = new Map(), byAddr = new Map(), byTel = new Map(), byKey = new Map();
+  for(const c of S.clients){
+    byFull.set(norm(c.vill + c.addr), c);
+    if(!byAddr.has(norm(c.addr))) byAddr.set(norm(c.addr), c);
+    const t = telKey(c.tel); if(t && !byTel.has(t)) byTel.set(t, c);
+    // «Садовая 2» встречается и в Крутой, и в Большой Ельне. Неоднозначный ключ
+    // приклеит клиента не к тому дому, поэтому такие ключи выбрасываем целиком.
+    const k = addrKey(c.addr);
+    if(k) byKey.set(k, byKey.has(k) ? null : c);
+  }
   for(const n of incoming){
     if(!n || !n.addr) continue;
-    const hit = idx.get(norm((n.vill||'') + n.addr)) || byAddr.get(norm(n.addr));
+    const hit = byFull.get(norm((n.vill||'') + n.addr))
+             || byAddr.get(norm(n.addr))
+             || byTel.get(telKey(n.tel))
+             || byKey.get(addrKey(n.addr)) || null;
     if(hit){
+      if(norm(hit.addr) !== norm(n.addr) || hit.vill !== n.vill) renamed++;
       Object.assign(hit, {
+        vill: n.vill || hit.vill, addr: n.addr || hit.addr,
         name: n.name || hit.name, tel: n.tel || hit.tel, tel2: n.tel2 || hit.tel2 || '',
         usual: Number(n.usual) || hit.usual || 0, rhythm: Number(n.rhythm) || hit.rhythm || 0,
         last: n.last || hit.last || '', status: n.status || hit.status || '',
         pay: n.pay || hit.pay || 'transfer', opt: !!n.opt,
-        note: n.note || hit.note || '', tare_notes: n.tare_notes || hit.tare_notes || '',
-        vill: hit.vill || n.vill
+        note: n.note || hit.note || '', tare_notes: n.tare_notes || hit.tare_notes || ''
       });
       upd++;
     } else {
@@ -586,7 +634,20 @@ function mergeClients(incoming){
       add++;
     }
   }
-  return {upd, add};
+  return {upd, add, renamed};
+}
+// Справочник лежит рядом с приложением: кнопкой подтянуть проще, чем искать файл.
+async function pullClients(){
+  try{
+    const r = await fetch('clients.json?t=' + Date.now(), {cache:'no-store'});
+    if(!r.ok) throw new Error('сервер ответил ' + r.status);
+    const doc = await r.json();
+    const list = Array.isArray(doc) ? doc : doc.clients;
+    if(!Array.isArray(list)) throw new Error('в файле нет списка клиентов');
+    const {upd, add, renamed} = mergeClients(list);
+    render();
+    alert(`Справочник от ${doc.exported || '?'}\nОбновлено ${upd}, добавлено ${add}, переехало по районам ${renamed}.\nВсего ${S.clients.length}.`);
+  }catch(e){ alert('Не смог обновить справочник: ' + e.message); }
 }
 function doImport(file){
   const r = new FileReader();
@@ -596,7 +657,7 @@ function doImport(file){
     catch(e){ return alert('Это не похоже на файл справочника: ' + e.message); }
     const list = Array.isArray(doc) ? doc : doc.clients;
     if(!Array.isArray(list)) return alert('В файле нет списка клиентов');
-    const {upd, add} = mergeClients(list);
+    const {upd, add, renamed} = mergeClients(list);
     // если в файле лежит и история (наша же копия) — восстанавливаем её целиком
     if(doc.tara && doc.money && confirm('В файле есть история тары и денег. Заменить текущую?')){
       S.tara = doc.tara; S.money = doc.money;
@@ -604,17 +665,17 @@ function doImport(file){
       if(doc.routes) S.routes = doc.routes;
     }
     render();
-    alert(`Готово. Обновлено ${upd}, добавлено ${add}. Всего в справочнике ${S.clients.length}.`);
+    alert(`Готово. Обновлено ${upd}, добавлено ${add}, переехало по районам ${renamed}. Всего в справочнике ${S.clients.length}.`);
   };
   r.onerror = () => alert('Не смог прочитать файл');
   r.readAsText(file, 'utf-8');
 }
-const cardCl = c => { const td = taraDebt(c.id), md = moneyDebt(c.id), d = daysAgo(lastOrder(c.id));
+const cardCl = c => { const td = taraDebt(c.id), md = moneyDebt(c.id), d = daysAgo(lastDate(c));
   return `<div class="card" onclick="openCl(${c.id})"><div class="rowx">
     <div class="f"><div class="addr">${esc(c.addr)}
       ${td>0?`<span class="chip tara">тара ${td}</span>`:td<0?`<span class="chip ok">переплата тарой ${-td}</span>`:''}
       ${md>0?`<span class="chip debt">${money(md)}</span>`:''}</div>
-      <div class="muted tiny">${c.name?esc(c.name)+' · ':''}обычно ${c.usual||'?'} бут.${d!==null?` · был ${d===0?'сегодня':d+' дн. назад'}`:' · заказов не было'}</div></div>
+      <div class="muted tiny">${c.name?esc(c.name)+' · ':''}обычно ${c.usual||'?'} бут. · ${agoText(d)}</div></div>
     <div class="muted">›</div></div></div>`; };
 function openCl(id){ S.open = id; render(); }
 function addClient(){
