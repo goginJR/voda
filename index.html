@@ -72,6 +72,15 @@ textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px sol
 .paysw{display:flex;gap:8px;margin-top:10px}
 .paysw button{flex:1;background:#18243d;color:#8da2c0;padding:11px}
 .paysw button.on{background:#2563eb;color:#fff}
+.cst{background:#111c31;border-radius:14px;padding:12px;margin:14px 0}
+.cst h3{margin:0 0 10px;font-size:15px}
+.crow{display:flex;gap:8px;margin-bottom:8px}
+.crow input{background:#0b1220;border:1px solid #2b3c5e;color:#e8eef9;border-radius:10px;padding:11px;font:inherit}
+.crow .w{flex:1;min-width:0}
+.crow .a{width:96px;text-align:right;font-weight:700}
+.crow .x{width:42px;background:#243352;color:#ff9d9d;padding:0}
+.quick{display:flex;gap:6px;flex-wrap:wrap}
+.quick button{background:#18243d;color:#cfe0f7;padding:9px 12px;font-size:13px}
 </style>
 </head>
 <body>
@@ -80,7 +89,7 @@ textarea{width:100%;height:150px;background:#0b1220;color:#cfe0f7;border:1px sol
 
 <script>
 const PAY_PER_BOTTLE = 80;          // фикса водителю, ₽ за бутыль
-const KEY = 'reis-2026-10-01-v5';
+const KEY = 'reis-2026-10-01-v6';
 
 // Заявки на 01.10.2026 — разобраны из группы «ЗАЯВКИ»
 const SEED = [
@@ -105,7 +114,7 @@ const streetRank = a => { const i = STREETS.findIndex(x => a.startsWith(x)); ret
 let S = load();
 function load(){
   try{ const r = localStorage.getItem(KEY); if(r) return JSON.parse(r); }catch(e){}
-  return {stage:'prep', open:null, pts: SEED.map(p=>({...p, done:false, back:null})), started:null, ended:null};
+  return {stage:'prep', open:null, costs:[], pts: SEED.map(p=>({...p, done:false, back:null})), started:null, ended:null};
 }
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify(S)); }catch(e){} }
 
@@ -200,36 +209,58 @@ const cardRun = p => `<div class="pt ${p.done?'done':''} ${S.open===p.id?'open':
 function renderFin(a,b){
   const d = totals(p=>p.done), t = totals();
   const earned = d.q * PAY_PER_BOTTLE;
-  const diff = d.cash - earned;
+  const costs = S.costs.reduce((x,c)=>x+(Number(c.amt)||0),0);
+  const diff = d.cash - earned - costs;
   a.innerHTML = `<h1 class="fin">Развоз закончен</h1><div class="fin">
     <div class="line"><span>Доставлено</span><b>${d.n} из ${t.n} · ${d.q} бут.</b></div>
     <div class="line"><span>Наличных на руках</span><b class="g">${money(d.cash)}</b></div>
     <div class="line"><span>Переводом (шефу напрямую)</span><b class="b">${money(d.card)}</b></div>
     <div class="line"><span>Заработал · ${PAY_PER_BOTTLE} ₽ × ${d.q}</span><b>${money(earned)}</b></div>
+
+    <div class="cst">
+      <h3>Расходы водителя</h3>
+      ${S.costs.map((c,i)=>`<div class="crow">
+        <input class="w" value="${(c.what||'').replace(/"/g,'&quot;')}" placeholder="за что" onchange="setCost(${i},'what',this.value)">
+        <input class="a" type="number" inputmode="numeric" value="${c.amt===''?'':c.amt}" placeholder="0" onchange="setCost(${i},'amt',this.value)">
+        <button class="x" onclick="delCost(${i})">✕</button>
+      </div>`).join('')}
+      <div class="quick">
+        <button onclick="addCost('Каршеринг')">Каршеринг</button>
+        <button onclick="addCost('ГСМ')">ГСМ</button>
+        <button onclick="addCost('Мойка')">Мойка</button>
+        <button onclick="addCost('')">Другое</button>
+      </div>
+      ${costs?`<div class="line" style="border:0;padding-top:12px"><span>Итого расходов</span><b class="r">${money(costs)}</b></div>`:''}
+    </div>
+
     <div class="hero">
       ${diff >= 0
         ? `<div class="muted">Вернуть шефу</div><div class="big g">${money(diff)}</div>`
-        : `<div class="muted">Требовать с шефа на карту</div><div class="big r">${money(-diff)}</div>`}
+        : `<div class="muted">Шеф должен водителю</div><div class="big r">${money(-diff)}</div>`}
     </div>
     <div class="line"><span>Выдал бутылей</span><b>${d.q}</b></div>
     <div class="line"><span>Забрал пустой тары</span><b>${d.back}</b></div>
     <div class="line"><span>Разница по таре</span><b class="${d.q-d.back?'r':''}">${d.q-d.back}</b></div>
-    <textarea id="rep" readonly style="margin-top:14px">${report(d,earned,diff)}</textarea>
+    <textarea id="rep" readonly style="margin-top:14px">${report(d,earned,costs,diff)}</textarea>
   </div>`;
   b.innerHTML = `<button class="b-main" onclick="copyRep()">Скопировать отчёт</button>
     <button class="b-ghost" style="width:100%;margin-top:8px" onclick="back()">Вернуться в рейс</button>`;
 }
+function addCost(w){ S.costs.push({what:w, amt:''}); render(); }
+function setCost(i,k,v){ S.costs[i][k] = (k==='amt' ? (v===''?'':Math.max(0,parseInt(v)||0)) : v); render(); }
+function delCost(i){ S.costs.splice(i,1); render(); }
 
-function report(d,earned,diff){
+function report(d,earned,costs,diff){
   const done = S.pts.filter(p=>p.done);
+  const cl = S.costs.filter(c=>Number(c.amt)>0).map(c=>`· ${c.what||'расход'} — ${money(Number(c.amt))}`).join('\n');
   return `Рейс ${new Date().toLocaleDateString('ru-RU')}
 Доставлено: ${d.n} адр., ${d.q} бут.
 ${done.map(p=>`· ${p.addr} — ${water(p)} — ${money(sum(p))} ${p.pay==='cash'?'наличные':'перевод'}${p.back!==null?`, тары ${p.back}`:''}`).join('\n')}
 
 Наличными: ${money(d.cash)}
 Переводом: ${money(d.card)}
-Заработал: ${money(earned)}
-${diff>=0?`Вернуть шефу: ${money(diff)}`:`Шеф должен на карту: ${money(-diff)}`}
+Заработал: ${money(earned)}${cl?`\n\nРасходы водителя:\n${cl}\nИтого расходов: ${money(costs)}`:''}
+${diff>=0?`Вернуть шефу: ${money(diff)}`:`Шеф должен водителю: ${money(-diff)}`}
 Тара: выдал ${d.q}, забрал ${d.back}, разница ${d.q-d.back}`;
 }
 
