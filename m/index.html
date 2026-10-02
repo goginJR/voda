@@ -428,7 +428,10 @@ function viewRoute(a, b){
   ${Object.keys(byV).map(v=>`<div class="vill">${esc(v)}</div>`+byV[v].map(cardPt).join('')).join('')}
   ${fillUpBlock(pts, q)}
   <div class="hr"></div>
-  <button class="b-ghost" style="width:100%" onclick="unRoute('${d}')">Разобрать рейс обратно в заявки</button>
+  <div class="frow">
+    <button class="b-ghost" style="flex:1" onclick="handOffText('${d}')">Состав рейса текстом</button>
+    <button class="b-ghost" style="flex:1" onclick="unRoute('${d}')">Разобрать обратно</button>
+  </div>
   ${routeHistory()}`;
   b.innerHTML = `<button class="b-main" onclick="handOff('${d}')">Передать водителю · ${dayLabel(d)}</button>`;
 }
@@ -490,7 +493,55 @@ function unRoute(date){
   S.routes = S.routes.filter(x=>x.id !== r.id);
   S.tab='orders'; S.newDay = d; render();
 }
+const DRIVER_URL = 'https://goginjr.github.io/voda/';
+
+// Рейс целиком уезжает водителю ссылкой. Сервера нет, а ссылка открывается
+// в его же установленном приложении и подменяет рейс на сегодняшний.
+/* Формат 2 — упакованный. В Telegram сообщение не длиннее 4096 знаков, а рейс
+   на 12 точек в читаемом JSON давал ссылку под 5000. Повторы (районы, виды воды,
+   «Нижегородская область, деревня Опалиха») вынесены в словари, поля — в массив.
+   Префикс карты хранится без адреса: он всегда «<место>, <адрес>». */
+function routeDoc(d, pts){
+  const W = [], V = [], M = [];
+  const idx = (arr, s) => { let i = arr.indexOf(s); if(i < 0){ arr.push(s); i = arr.length-1; } return i; };
+  const P = pts.map(o => {
+    const c = cli(o.client);
+    // Обычно map = «<место>, <адрес>» и хватает места. Но адрес в справочнике
+    // может не совпадать с хвостом карты («Культура Молодёжная 1» против
+    // «…, Молодёжная дом 1»); тогда везём строку целиком, код индекса < -1.
+    const tail = ', ' + c.addr;
+    const nt = [o.note, c.note].filter(Boolean).join(' · ');
+    const ap = c.apt && (c.apt.floor || c.apt.flat || c.apt.code)
+      ? {f:Number(c.apt.floor)||0, k:c.apt.flat||'', e:c.apt.ent||'', c:c.apt.code||'', a:c.apt.acc||''}
+      : 0;
+    const mi = !c.map ? -1
+      : c.map.endsWith(tail) ? idx(M, c.map.slice(0, -tail.length))
+      : -(idx(M, c.map) + 2);
+    return [o.id, idx(V, c.vill), c.addr, c.name||'', (c.pay==='cash'?1:0),
+            o.items.map(i=>[idx(W, i.w), i.q, i.p]), mi, nt || '', ap];
+  });
+  return {v:2, d, W, V, M, P};
+}
+function routeLink(doc){
+  const b64 = btoa(unescape(encodeURIComponent(JSON.stringify(doc))))
+    .replace(/\+/g,'-').replace(/\//g,'_');
+  return DRIVER_URL + '#r=' + b64;
+}
 function handOff(date){
+  const d = date || S.day || today(), r = routeFor(d);
+  const pts = r ? plannedIn(r.id) : [];
+  if(!pts.length) return;
+  const link = routeLink(routeDoc(d, pts));
+  if(link.length > 7000 && !confirm(`Ссылка получилась длинная (${link.length} знаков) — в некоторых мессенджерах такая ломается. Всё равно отправить?`)) return;
+  r.status = 'frozen';
+  const q = pts.reduce((s,o)=>s+bottles(o),0);
+  const txt = `Рейс на ${ruDate(d)} · ${pts.length} адр., ${q} бут.\nОткрой ссылку — рейс сам встанет в приложение:\n${link}`;
+  render();
+  if(navigator.share) return navigator.share({text:txt}).catch(()=>copy(txt,'Ссылка на рейс скопирована — отправь водителю.'));
+  copy(txt, 'Ссылка на рейс скопирована — отправь водителю.');
+}
+// Запасной вариант: тот же рейс простым текстом, без ссылки.
+function handOffText(date){
   const d = date || S.day || today(), r = routeFor(d);
   const pts = r ? plannedIn(r.id) : [];
   if(!pts.length) return;
@@ -501,7 +552,7 @@ function handOff(date){
           + (f?` (${f} этаж)`:'') + (c.apt&&c.apt.code?`, домофон ${c.apt.code}`:'')
           + (c.apt&&c.apt.flat?`, кв. ${c.apt.flat}`:''); }).join('\n')
     + `\n\nИтого: ${pts.length} адр., ${pts.reduce((s,o)=>s+bottles(o),0)} бут., ${money(pts.reduce((s,o)=>s+orderSum(o),0))}`;
-  copy(txt, 'Состав рейса скопирован. Пока сервера нет — отправь водителю сообщением.');
+  copy(txt, 'Состав рейса скопирован текстом.');
 }
 function routeHistory(){
   const done = S.routes.filter(r=>r.status==='done').sort((a,b)=>b.date.localeCompare(a.date));
