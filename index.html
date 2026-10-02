@@ -153,11 +153,18 @@ const VILL_MAP = {
   'ЖК Времена года':    '', 'ТИЗ Надежда': '', 'Область': '', 'Свои': ''
 };
 
+const todayStr = () => { const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+
 /* ---------- рейс ----------
-   Приходит ссылкой от менеджера: #r=<base64 json>. Разобранный рейс ложится
-   в localStorage под свою дату, поэтому обновление кода не стирает отметки.
-   DEMO — вчерашний настоящий рейс, чтобы было на чём потыкать. */
-const DEMO = {d:'2026-10-01', pts:[
+   Настоящий рейс приходит ссылкой от менеджера: #r=<base64 json>. Разобранный
+   рейс ложится в localStorage под свою дату, поэтому обновление кода не стирает
+   отметки водителя.
+   DEMO — временный тестовый рейс: заявки от 01.10 продублированы на сегодня,
+   чтобы было на чём потыкать с нуля. Каждый новый день он снова чистый.
+   Убрать вместе с флагом DEMO_ON, когда начнут приходить настоящие ссылки. */
+const DEMO_ON = true;
+const DEMO = {d:todayStr(), demo:true, pts:[
   {id:1, vill:'ОпаЕльня', addr:'Ближняя 27', name:'', pay:'card', items:[{w:'Идель',q:5,p:200}],
    map:'Нижегородская область, деревня Опалиха, Ближняя 27', note:'с 30.09 · замена плохих, тару оставить негде'},
   {id:2, vill:'ОпаЕльня', addr:'Радужная 15', name:'', pay:'card', items:[{w:'Идель',q:3,p:200}],
@@ -219,8 +226,13 @@ function unpack(r){
   })};
 }
 
+// Последний присланный рейс переживает перезапуск: иначе обновление страницы
+// без ссылки в адресе откатило бы водителя на демо.
+function lastRoute(){
+  try{ const r = localStorage.getItem('reis-last'); return r ? JSON.parse(r) : null; }catch(e){ return null; }
+}
 const incoming = fromHash();
-const ROUTE = incoming || DEMO;
+const ROUTE = incoming || lastRoute() || (DEMO_ON ? DEMO : {d:todayStr(), pts:[]});
 const ROUTE_DATE = ROUTE.d;
 const KEY = 'reis-' + ROUTE_DATE;
 const SCHEMA = 3;
@@ -318,6 +330,11 @@ const doneOrder = () => S.pts.filter(p=>p.st==='done').sort((a,b)=>(a.ts||0)-(b.
 /* ---------- отрисовка ---------- */
 function render(){
   const a = document.getElementById('app'), b = document.getElementById('bar');
+  if(!S.pts.length){
+    a.innerHTML = `<h1>Рейса нет</h1><div class="sum"><div class="muted small">
+      Жди ссылку от менеджера — рейс встанет сам, как только её откроешь.</div></div>`;
+    b.innerHTML = ''; return;
+  }
   if(S.stage==='prep')     renderPrep(a,b);
   else if(S.stage==='run') renderRun(a,b);
   else                     renderFin(a,b);
@@ -338,6 +355,7 @@ function renderPrep(a,b){
       ${byWater().map(([w,q])=>`<div class="lr"><span>${esc(w)}</span><b>${q+SPARE}</b></div>
         <div class="lr" style="padding-top:0"><i>по заявкам ${q} + запас ${SPARE} (можно ${SPARE+1})</i></div>`).join('')}
     </div>
+    ${ROUTE.demo?`<div class="muted small" style="margin-bottom:10px">Тестовый рейс: заявки от 01.10 продублированы на сегодня. Настоящий придёт ссылкой от менеджера.</div>`:''}
     <div class="muted small" style="margin-bottom:10px">Пока не нажал «Я в рейсе» — список может меняться.</div>
     ${inOrder().map(cardPrep).join('')}`;
   b.innerHTML = `<button class="b-main" onclick="start()">Я в рейсе · ${t.q} бут.</button>`;
@@ -374,6 +392,7 @@ function renderRun(a,b){
         <div class="small b" style="margin-top:10px">Погрузка: ${byWater().map(([w,q])=>esc(w)+' '+(q+SPARE)).join(' · ')} (с запасом ${SPARE})</div>
         ${S.started?`<div class="small muted" style="margin-top:4px">В рейсе с ${tm(S.started)} · ${dur(Date.now()-S.started)}</div>`:''}
       </div>
+      <button class="b-ghost" style="width:100%" onclick="reset()">Начать рейс заново</button>
     </details>`;
   b.innerHTML = left
     ? `<button class="b-ghost" style="width:100%" onclick="finish()">Развоз закончен · осталось ${left}</button>`
@@ -510,7 +529,10 @@ function renderFin(a,b){
     </details>
   </div>`;
   b.innerHTML = `<button class="b-main" onclick="sendRep()">Отправить отчёт в телеграм</button>
-    <button class="b-ghost" style="width:100%;margin-top:8px" onclick="back()">Вернуться в рейс</button>`;
+    <div class="row" style="margin-top:8px">
+      <button class="b-ghost" onclick="back()">Вернуться в рейс</button>
+      <button class="b-ghost" onclick="reset()">Начать заново</button>
+    </div>`;
 }
 
 function report(d,earned,costs,diff,total){
@@ -582,6 +604,13 @@ function finish(){
   S.stage='fin'; S.ended = Date.now(); render(); scrollTo(0,0);
 }
 function back(){ S.stage='run'; render(); }
+// Сброс отметок текущего рейса. Сам рейс остаётся, прошлые дни не трогаем.
+function reset(){
+  if(!confirm('Сбросить все отметки по этому рейсу и начать с начала?')) return;
+  try{ localStorage.removeItem(KEY); }catch(e){}
+  S = {v:SCHEMA, stage:'prep', open:null, costs:[], pts:ROUTE.pts.map(mk), started:null, ended:null};
+  render(); scrollTo(0,0);
+}
 function repText(){
   const d = totals(p=>p.st==='done');
   const earned = d.q*PAY_PER_BOTTLE + d.fl;

@@ -666,6 +666,7 @@ function mergeClients(incoming){
   }
   for(const n of incoming){
     if(!n || !n.addr) continue;
+    let made = null;
     const hit = byFull.get(norm((n.vill||'') + n.addr))
              || byAddr.get(norm(n.addr))
              || byTel.get(telKey(n.tel))
@@ -684,11 +685,22 @@ function mergeClients(incoming){
       });
       upd++;
     } else {
-      S.clients.push({...n, id: nid(), active: n.active !== false});
+      made = {...n, id: nid(), active: n.active !== false};
+      S.clients.push(made);
       add++;
     }
+    seedTare(hit || made, n);
   }
   return {upd, add, renamed};
+}
+// Долг по таре, который висел на клиенте до того, как мы начали считать.
+// Без него возврат «лишней» тары выглядит как переплата: на Изумрудной отдали
+// 4 пустых при 2 бутылях, а это они гасили старый долг. Заводим ровно один раз.
+const TARE0 = 'остаток до начала учёта';
+function seedTare(c, n){
+  if(!c || !n || !Number(n.tare0)) return;
+  if(S.tara.some(t => t.client === c.id && t.reason === TARE0)) return;
+  S.tara.push({client:c.id, at:'2026-09-30', given:Number(n.tare0), taken:0, reason:TARE0});
 }
 // Справочник лежит рядом с приложением: кнопкой подтянуть проще, чем искать файл.
 async function pullClients(){
