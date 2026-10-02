@@ -1,4 +1,4 @@
-const CACHE = 'reis-v12';
+const CACHE = 'reis-v13';
 const FILES = ['./', './index.html', './manager.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
