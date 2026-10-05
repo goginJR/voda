@@ -705,6 +705,8 @@ function viewClients(a, b){
       <input id="na" placeholder="улица и дом">
     </div>
     <div class="frow"><input id="nn" placeholder="имя, необязательно">
+      <input id="nt" placeholder="телефон"></div>
+    <div class="frow"><input id="nm" placeholder="адрес на карте, если район новый">
       <button class="b-ok b-sm" onclick="addClient()">Создать</button></div>
   </div>`;
   const fi = document.getElementById('fi');
@@ -849,8 +851,17 @@ function openCl(id){ S.open = id; render(); }
 function addClient(){
   const addr = document.getElementById('na').value.trim();
   if(!addr) return alert('нужен адрес');
-  S.clients.push({id:nid(), vill:document.getElementById('nv').value, addr,
-    name:document.getElementById('nn').value.trim(), tel:'', usual:0, rhythm:0, note:'', active:true});
+  const vill = document.getElementById('nv').value;
+  // без адреса на карте у водителя не работает кнопка «Маршрут», поэтому
+  // собираем его сами: берём написание района у соседей по этому же району
+  const twin = S.clients.find(c => c.vill === vill && c.real);
+  const typed = (document.getElementById('nm') || {}).value;
+  const map = (typed || '').trim()
+    || (twin ? 'Нижегородская область, ' + twin.real + ', ' + addr : '');
+  S.clients.push({id:nid(), vill, addr, real: twin ? twin.real : '', map,
+    name:document.getElementById('nn').value.trim(),
+    tel:((document.getElementById('nt')||{}).value||'').trim(),
+    usual:0, rhythm:0, note:'', active:true});
   render();
 }
 
