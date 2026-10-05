@@ -307,40 +307,139 @@ function addManual(){
 }
 function dropOrder(id){ S.orders = S.orders.filter(o=>o.id!==id); render(); }
 
-/* ---------- разбор вставленного текста ---------- */
+/* ---------- разбор вставленного текста ----------
+   Заявка = абзац: блок строк, отделённый пустой строкой. Внутрь одного блока
+   попадают и человеческие сообщения («Здравствуйте, 4 бутылки, Яблоневая 82»),
+   и пересланная форма («Адрес: …», «Бут: 4*200=800»). Разбор идёт в три шага:
+   чистим мусор → достаём количество → ищем клиента по словам, а не по подстроке. */
 const norm = s => s.toLowerCase().replace(/ё/g,'е').replace(/[^a-zа-я0-9]/g,'');
+// «кв10» и «д.5» разбираем на слово и число, иначе номер квартиры не сравнить
+const words = s => String(s||'').toLowerCase().replace(/ё/g,'е')
+  .replace(/([a-zа-я])(\d)/g,'$1 $2').replace(/(\d)([a-zа-я])/g,'$1 $2')
+  .split(/[^a-zа-я0-9]+/).filter(Boolean);
+
+// служебные поля пересланной формы и вежливость — в разбор не идут
+const FIELD = /^(дата|время|дата\/время|телефон|тел|комментарий|клиент|заявка|оплата|доп|тара|бут)\s*:/i;
+const HELLO = /^(здравствуйте|добрый день|доброе утро|добрый вечер|привет|доброго|спасибо|пожалуйста|нужна вода|можно воды)\b/i;
+const STOP = new Set(words(`здравствуйте добрый день утро вечер привет спасибо пожалуйста можно заказать
+  нужна нужно вода воды бутылка бутылки бутылек бутыль бутыли бут шт штук на завтра сегодня потом
+  дом д ул улица пер переулок код от домофон домофона кв квартира этаж подъезд тел телефон
+  тара есть нет оплата перевод наличные нал карта доп комментарий дата время клиент заявка адрес
+  идель дивеево рынок пожалуйста утром вечером днём днем`));
+
+/* Количество. Числа, которые количеством быть не могут, сначала вырезаем:
+   содержимое скобок, коды домофона, телефоны, номера квартир и этажей,
+   длинные числа и цену в записи «4*200=800». */
+function qtyOf(text){
+  let t = ' ' + String(text).replace(/\([^)]*\)/g, ' ') + ' ';
+  t = t.replace(/(код|домофон\w*|тел\w*|кв\.?|квартира|этаж|подъезд)\s*[:№-]?\s*\d+/gi, ' ');
+  t = t.replace(/\+?\d[\d\s()-]{9,}/g, ' ');            // телефоны
+  const mult = t.match(/(\d+)\s*[*х×]\s*\d+/);           // «4*200=800» — бутыли это первое число
+  if (mult) return [Number(mult[1])];
+  t = t.replace(/\d{5,}/g, ' ');                         // коды и прочие длинные числа
+  const pair = t.match(/(\d+)\s*\+\s*(\d+)/);            // «1 + 1 дивеево»
+  if (pair) return [Number(pair[1]), Number(pair[2])];
+  let m = t.match(/(\d+)\s*(?:бут|бутыл|шт)/i)           // «4 бут», «2 бутыли»
+       || t.match(/(?:бут\w*)\s*[:№-]?\s*(\d+)/i)        // «Бут: 4»
+       || t.match(/[-–—:]\s*(\d+)\s*$/)                  // «Светлая 119 - 5»
+       || t.match(/(\d+)\s*$/)                           // «Ступишина 10»
+       || t.match(/(\d+)(?!.*\d)/);                      // «Садовая 1 - 4 дивеево»
+  return m ? [Number(m[1])] : [];
+}
+
+/* Поиск клиента. Считаем, сколько слов из текста заявки встречается в районе,
+   адресе и имени клиента. Сравниваем по словам: подстрока давала ложные
+   попадания («али» внутри «Калиновая»). Имя допускает начало слова, чтобы
+   «Юля» находила «Юлию». Победитель должен быть строго лучше второго. */
+/* Имя клиента в заявке часто пишут не как в справочнике: «Юля» против «Юлия».
+   Засчитываем слабым совпадением, если слова отличаются не больше чем на одну
+   букву. Вес у такого совпадения вдвое меньше, чем у точного. */
+function near(a, b){
+  if(a === b) return true;
+  if(Math.abs(a.length - b.length) > 1) return false;
+  if(a.length > b.length){ const t = a; a = b; b = t; }     // a — короткое
+  let i = 0, j = 0, slip = 0;
+  while(i < a.length && j < b.length){
+    if(a[i] === b[j]){ i++; j++; continue; }
+    if(++slip > 1) return false;
+    if(a.length === b.length){ i++; j++; } else { j++; }
+  }
+  return slip + (b.length - j) + (a.length - i) <= 1;
+}
+
 function findClient(txt){
-  const n = norm(txt);
-  if(!n) return null;
-  let best = null, bestLen = 0;
+  const toks = words(txt).filter(w => w.length > 1 && !STOP.has(w));
+  if(!toks.length) return null;
+  const nums = toks.filter(t => /^\d+$/.test(t));
+  let best = null, bestScore = 0, second = 0;
   for(const c of S.clients){
     if(!c.active) continue;
-    const ca = norm(c.addr);
-    if(n.startsWith(ca) || ca.startsWith(n) || n.includes(ca)){
-      if(ca.length > bestLen){ best = c; bestLen = ca.length; }
+    const addr = words(c.addr), vill = words(c.vill), name = words(c.name||'');
+    // номера дома и квартиры обязаны совпасть все: «Каштановая 5/2» не поедет в «Каштановую 3/5»
+    if(nums.some(n => !addr.includes(n))) continue;
+    let score = 0;
+    for(const t of toks){
+      if(addr.includes(t) || vill.includes(t)) { score += 2; continue; }
+      if(name.includes(t)) { score += 2; continue; }
+      if(t.length >= 3 && name.some(n => near(n, t))) score += 1;   // «Юля» ↔ «Юлия»
     }
+    if(score > bestScore){ second = bestScore; bestScore = score; best = c; }
+    else if(score > second) second = score;
   }
-  return best;
+  return (bestScore && bestScore > second) ? best : null;
 }
+
+/* Перед поиском клиента вычищаем всё количественное: иначе «- 4» в конце
+   строки притягивало дом номер 4, а «Катершоп - 12» спорил с домом 12. */
+function stripQty(t, nums){
+  const q = nums || [];
+  return String(t).replace(/\([^)]*\)/g, ' ')
+    .replace(/\d+\s*\+\s*\d+/g, ' ')                     // «1 + 1 дивеево»
+    .replace(/(код|домофон\w*|тел\w*)\s*[:№-]?\s*\d+/gi, ' ')
+    .replace(/\+?\d[\d\s()-]{9,}/g, ' ')
+    .replace(/\d+\s*[*х×]\s*\d+\s*=?\s*\d*/g, ' ')
+    .replace(/\d+\s*(?:бут|бутыл|шт)\w*/gi, ' ')
+    .replace(/(?:бут|бутыл|шт)\w*\s*[:№-]?\s*\d+/gi, ' ')
+    .replace(/[-–—:]\s*\d+\s*$/, ' ')
+    .replace(/\d{5,}/g, ' ')
+    // последнее число убираем, только если это и есть распознанное количество:
+    // «Ступишина 10» — количество, «Светлая 119» — номер дома
+    .replace(/(\d+)(?!.*\d)/, m => q.includes(Number(m)) ? ' ' : m);
+}
+
 function doParse(){
-  const lines = String(S.paste || '').split('\n').map(s=>s.trim()).filter(Boolean);
-  S.parsed = lines.map(line => {
-    const div = /дивеев/i.test(line);
-    // количества — все числа, не входящие в номер дома: берём после разделителя или последнее
-    const nums = (line.match(/\d+/g) || []).map(Number);
-    const cut  = line.search(/[-–—:]|\s\d+\s*(бут|шт)/i);
-    const head = (cut > 0 ? line.slice(0, cut) : line.replace(/\s*\d+\s*$/, '')).trim();
-    const c = findClient(head);
-    let q = nums.length ? nums[nums.length-1] : 0;
-    let items;
-    if(div && nums.length >= 2){
-      items = [{w:'Идель', q:nums[nums.length-2], p:PRICE['Идель']},
-               {w:'Дивеево', q:nums[nums.length-1], p:PRICE['Дивеево']}];
-    } else {
-      items = [{w: div ? 'Дивеево' : 'Идель', q, p: div ? PRICE['Дивеево'] : PRICE['Идель']}];
+  const blocks = String(S.paste || '').split(/\n\s*\n/)
+    .map(b => b.split('\n').map(x => x.trim()).filter(Boolean))
+    .filter(b => b.length);
+  S.parsed = [];
+  for(const lines of blocks){
+    const useful = [], extra = [];
+    for(const ln of lines){
+      if(HELLO.test(ln) && !/\d/.test(ln)) continue;                 // чистая вежливость
+      const f = ln.match(/^(адрес)\s*:\s*(.+)$/i);
+      if(f){ useful.push(f[2]); continue; }                          // «Адрес: ул. Новогорская, 44»
+      if(FIELD.test(ln)){ extra.push(ln); continue; }                // прочие поля формы
+      useful.push(ln);
     }
-    return {line, head, client: c ? c.id : null, items, ok: !!c && items.every(i=>i.q>0)};
-  });
+    const head = useful.join(' ').trim();
+    if(!head) continue;
+    const div = /дивеев/i.test(head + ' ' + extra.join(' '));
+    // поле «Бут:» из пересланной формы главнее текста: в тексте рядом стоит
+    // номер дома, и «Новогорская, 44» давала 44 бутыли
+    const fields = extra.join(' ');
+    let nums = /бут/i.test(fields) ? qtyOf(fields) : [];
+    if(!nums.length) nums = qtyOf(head);
+    if(!nums.length) nums = qtyOf(fields);
+    const c = findClient(stripQty(head, nums));
+    const items = (div && nums.length >= 2)
+      ? [{w:'Идель', q:nums[0], p:PRICE['Идель']}, {w:'Дивеево', q:nums[1], p:PRICE['Дивеево']}]
+      : [{w: div ? 'Дивеево' : 'Идель', q: nums[0] || 0, p: div ? PRICE['Дивеево'] : PRICE['Идель']}];
+    const code = (head.match(/(?:код|домофон\w*)\s*[:№-]?\s*(\d+)/i) || [])[1];
+    const note = [code ? 'домофон ' + code : '', /тара есть/i.test(extra.join(' ')) ? 'тара есть' : '']
+      .filter(Boolean).join(' · ');
+    S.parsed.push({line: lines.join(' / '), head, client: c ? c.id : null, items, note,
+                   ok: !!c && items.every(i => i.q > 0)});
+  }
   render();
 }
 function parsedBlock(){
@@ -368,7 +467,7 @@ function setParsedClient(i, v){ S.parsed[i].client = v ? Number(v) : null;
 function commitParsed(){
   S.parsed.filter(p=>p.ok).forEach(p=>S.orders.push({id:nid(), client:p.client,
     items:p.items.filter(x=>x.q>0), pay:'transfer', status:'new',
-    want:S.newDay||today(), extra:0, back:null, note:''}));
+    want:S.newDay||today(), extra:0, back:null, note:p.note||''}));
   S.parsed = null; S.paste = ''; render();
 }
 
